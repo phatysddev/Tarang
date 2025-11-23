@@ -1,20 +1,21 @@
-# Tarang
+# TarangDB
 
 A Google Sheets ORM for Node.js and Bun, inspired by Prisma.
 
 ## Features
 
 - **Type-safe Schema**: Define your schema in TypeScript.
-- **Easy Relationships**: Support for `hasOne` and `hasMany`.
+- **Easy Relationships**: Support for `hasOne` and `hasMany` with `include`.
 - **Node & Bun Compatible**: Works seamlessly in both environments.
 - **Simple API**: Familiar CRUD operations (`findMany`, `create`, `update`, `delete`).
+- **Pagination & Selection**: Support for `limit`, `skip`, and `select`.
 
 ## Installation
 
 ```bash
-npm install tarang google-auth-library googleapis
+npm install tarang-db google-auth-library googleapis
 # or
-bun add tarang google-auth-library googleapis
+bun add tarang-db google-auth-library googleapis
 ```
 
 ## Usage
@@ -22,7 +23,7 @@ bun add tarang google-auth-library googleapis
 ### 1. Setup Client
 
 ```typescript
-import { TarangClient } from 'tarang';
+import { TarangClient } from 'tarang-db';
 
 const client = new TarangClient({
   spreadsheetId: 'YOUR_SPREADSHEET_ID',
@@ -36,10 +37,10 @@ const client = new TarangClient({
 ### 2. Define Schema & Model
 
 ```typescript
-import { Model, Schema } from 'tarang';
+import { Model, Schema } from 'tarang-db';
 
 const UserSchema: Schema = {
-  id: { type: 'string', unique: true },
+  id: { type: 'uuid', unique: true },
   name: { type: 'string' },
   email: { type: 'string' },
   age: { type: 'number' },
@@ -63,7 +64,6 @@ const userModel = new Model<User>(client, {
 ```typescript
 // Create
 await userModel.create({
-  id: '1',
   name: 'Alice',
   email: 'alice@example.com',
   age: 25,
@@ -72,22 +72,45 @@ await userModel.create({
 // Find
 const users = await userModel.findMany({ age: 25 });
 
+// Find with Select & Pagination
+const selectedUsers = await userModel.findMany(
+    { age: 25 },
+    { 
+        select: { name: true },
+        limit: 10,
+        skip: 0
+    }
+);
+
 // Update
-await userModel.update({ id: '1' }, { age: 26 });
+await userModel.update({ email: 'alice@example.com' }, { age: 26 });
 
 // Delete
-await userModel.delete({ id: '1' });
+await userModel.delete({ email: 'alice@example.com' });
 ```
 
 ## Relationships
 
-Use the `Relation` helper to handle relationships.
+Define relationships in your model config:
 
 ```typescript
-import { Relation } from 'tarang';
+const userModel = new Model<User>(client, {
+  sheetName: 'Users',
+  schema: UserSchema,
+  relations: {
+    posts: {
+      type: 'hasMany',
+      targetModel: postModel,
+      foreignKey: 'userId',
+      localKey: 'id',
+    },
+  },
+});
 
-// Assuming you have userModel and postModel
-const posts = await Relation.hasMany(userModel, postModel, 'userId', 'id', user.id);
+// Query with include
+const usersWithPosts = await userModel.findMany(undefined, {
+    include: { posts: true }
+});
 ```
 
 ## License
