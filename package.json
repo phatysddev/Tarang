@@ -1,0 +1,37 @@
+{
+  "name": "tarang",
+  "version": "0.1.0",
+  "description": "A Google Sheets ORM for Node.js and Bun",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "test": "bun test",
+    "prepublishOnly": "bun run build"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^24.10.1",
+    "@types/uuid": "^11.0.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@paralleldrive/cuid2": "^3.0.4",
+    "google-auth-library": "^10.5.0",
+    "googleapis": "^166.0.0",
+    "uuid": "^13.0.0"
+  }
+}
