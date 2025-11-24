@@ -1,14 +1,14 @@
 import { TarangClient, Model, Schema, DataTypes } from '../src';
 
 // Example Schema
-const UserSchema: Schema = {
+const UserSchema = new Schema({
     id: { type: DataTypes.UUID, unique: true }, // Auto-generated UUID
     cuid: { type: DataTypes.CUID, unique: true }, // Auto-generated CUID
-    name: { type: DataTypes.String },
+    name: DataTypes.String, // Shorthand
     email: { type: DataTypes.String, unique: true },
-    age: { type: DataTypes.Number },
+    age: DataTypes.Number, // Shorthand
     isActive: { type: DataTypes.Boolean, default: true },
-};
+});
 
 interface User {
     id: string;
@@ -20,12 +20,12 @@ interface User {
 }
 
 // Post Schema
-const PostSchema: Schema = {
+const PostSchema = new Schema({
     id: { type: DataTypes.Number, autoIncrement: true, unique: true }, // Auto Increment ID
-    title: { type: DataTypes.String },
-    content: { type: DataTypes.String },
-    userId: { type: DataTypes.String }, // Foreign Key
-};
+    title: DataTypes.String,
+    content: DataTypes.String,
+    userId: DataTypes.String, // Foreign Key
+});
 
 interface Post {
     id: number;

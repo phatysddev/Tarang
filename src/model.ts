@@ -1,11 +1,14 @@
 import { TarangClient } from './client';
-import { ModelConfig, RowData, Schema } from './types';
+import { ModelConfig, RowData } from './types';
 import { DataType } from './datatypes';
 import { parseValue, stringifyValue } from './utils';
 import { v4 as uuidv4 } from 'uuid';
 import { createId } from '@paralleldrive/cuid2';
 
 import { RelationConfig } from './types';
+
+import { Schema } from './schema';
+import { ColumnDefinition } from './types';
 
 export class Model<T = any> {
     private client: TarangClient;
@@ -31,7 +34,7 @@ export class Model<T = any> {
             this.headers = values[0];
         } else {
             // Create headers if they don't exist based on schema
-            this.headers = Object.keys(this.schema);
+            this.headers = Object.keys(this.schema.definition);
             await this.client.updateValues(`${this.sheetName}!A1`, [this.headers]);
         }
     }
@@ -40,9 +43,9 @@ export class Model<T = any> {
         const obj: any = {};
         this.headers.forEach((header, index) => {
             const value = row[index];
-            const columnDef = this.schema[header];
+            const columnDef = this.schema.definition[header];
             if (columnDef) {
-                const type = columnDef.type instanceof DataType ? columnDef.type.type : columnDef.type as string;
+                const type = columnDef.type instanceof DataType ? columnDef.type.type : 'string';
                 obj[header] = parseValue(value, type as any);
             } else {
                 obj[header] = value;
@@ -212,8 +215,8 @@ export class Model<T = any> {
     private async prepareDataForCreate(data: Partial<T>): Promise<any> {
         const dataWithDefaults: any = { ...data };
 
-        for (const key in this.schema) {
-            const columnDef = this.schema[key];
+        for (const key in this.schema.definition) {
+            const columnDef = this.schema.definition[key];
             let type: string;
             let isAutoIncrement = false;
 
@@ -221,8 +224,9 @@ export class Model<T = any> {
                 type = columnDef.type.type;
                 isAutoIncrement = columnDef.type.isAutoIncrement || !!columnDef.autoIncrement;
             } else {
-                type = columnDef.type as string;
-                isAutoIncrement = !!columnDef.autoIncrement;
+                // Should not happen with strict types, but for runtime safety
+                type = 'string';
+                isAutoIncrement = false;
             }
 
             if (dataWithDefaults[key] === undefined) {

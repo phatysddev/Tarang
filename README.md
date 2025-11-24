@@ -45,23 +45,20 @@ const client = new TarangClient({
 ```
 
 ### 2. Define Schema & Model
-
-```typescript
-### 2. Define Schema & Model
-
+ 
 ```typescript
 import { Model, Schema, DataTypes } from 'tarang-db';
-
+ 
 // Define Schema
-const UserSchema: Schema = {
+const UserSchema = new Schema({
   id: { type: DataTypes.UUID, unique: true }, // Auto-generated UUID
-  name: { type: DataTypes.String },
+  name: DataTypes.String, // Shorthand
   email: { type: DataTypes.String, unique: true },
-  age: { type: DataTypes.Number },
+  age: DataTypes.Number, // Shorthand
   isActive: { type: DataTypes.Boolean, default: true },
-  metadata: { type: DataTypes.JSON },
-};
-
+  metadata: DataTypes.JSON,
+});
+ 
 // Define TypeScript Interface
 interface User {
   id: string;
@@ -71,16 +68,16 @@ interface User {
   isActive: boolean;
   metadata: any;
 }
-
+ 
 // Initialize Model
 const userModel = new Model<User>(client, {
   sheetName: 'Users', // Name of the tab in Google Sheets
   schema: UserSchema,
 });
 ```
-
+ 
 ### 3. CRUD Operations
-
+ 
 #### Create
 ```typescript
 const newUser = await userModel.create({
@@ -90,12 +87,12 @@ const newUser = await userModel.create({
   metadata: { role: 'admin' },
 });
 ```
-
+ 
 #### Find Many
 ```typescript
 // Find all users aged 25
 const users = await userModel.findMany({ age: 25 });
-
+ 
 // Find with Pagination and Selection
 const pagedUsers = await userModel.findMany(
   { isActive: true },
@@ -106,12 +103,12 @@ const pagedUsers = await userModel.findMany(
   }
 );
 ```
-
+ 
 #### Find First
 ```typescript
 const user = await userModel.findFirst({ email: 'alice@example.com' });
 ```
-
+ 
 #### Update
 ```typescript
 // Update all users named 'Alice'
@@ -120,34 +117,34 @@ const updatedUsers = await userModel.update(
   { age: 26 }
 );
 ```
-
+ 
 #### Delete
 ```typescript
 // Delete user with specific email
 const deletedCount = await userModel.delete({ email: 'alice@example.com' });
 ```
-
+ 
 ## Relationships
-
+ 
 TarangDB supports defining relationships between models.
-
+ 
 ### Defining Relationships
-
+ 
 ```typescript
 // Post Schema with Auto Increment ID
-const PostSchema: Schema = {
+const PostSchema = new Schema({
   id: { type: DataTypes.Number, autoIncrement: true, unique: true },
-  title: { type: DataTypes.String },
-  content: { type: DataTypes.String },
-  userId: { type: DataTypes.String },
-};
-
+  title: DataTypes.String,
+  content: DataTypes.String,
+  userId: DataTypes.String,
+});
+ 
 // Post Model
 const postModel = new Model<Post>(client, {
   sheetName: 'Posts',
   schema: PostSchema,
 });
-
+ 
 // User Model with Relations
 const userModel = new Model<User>(client, {
   sheetName: 'Users',

@@ -8,19 +8,29 @@ export type SheetConfig = {
     auth: GoogleSheetsAuth;
 };
 
-import { DataType } from './datatypes';
+import { DataType, NumberDataType } from './datatypes';
 
-export type ColumnType = 'string' | 'number' | 'boolean' | 'json' | 'uuid' | 'cuid';
-
-export interface ColumnDefinition {
-    type: ColumnType | DataType;
+export interface BaseColumnDefinition {
     unique?: boolean;
     default?: any;
+}
+
+export interface NumberColumnDefinition extends BaseColumnDefinition {
+    type: NumberDataType;
     autoIncrement?: boolean;
 }
 
-export interface Schema {
-    [key: string]: ColumnDefinition;
+export interface OtherColumnDefinition extends BaseColumnDefinition {
+    type: DataType;
+    autoIncrement?: never;
+}
+
+export type ColumnDefinition = NumberColumnDefinition | OtherColumnDefinition;
+
+export type SchemaType = ColumnDefinition | DataType | NumberDataType;
+
+export interface SchemaDefinition {
+    [key: string]: SchemaType;
 }
 
 export interface RelationConfig {
@@ -29,6 +39,8 @@ export interface RelationConfig {
     foreignKey: string;
     localKey: string;
 }
+
+import { Schema } from './schema';
 
 export interface ModelConfig {
     sheetName: string;
