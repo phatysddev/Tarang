@@ -1,10 +1,10 @@
 import { SchemaDefinition, ColumnDefinition } from './types';
 import { DataType, NumberDataType, DateDataType } from './datatypes';
 
-export class Schema {
+export class Schema<T extends SchemaDefinition = SchemaDefinition> {
     public definition: Record<string, ColumnDefinition>;
 
-    constructor(definition: SchemaDefinition) {
+    constructor(definition: T) {
         this.definition = {};
         for (const key in definition) {
             const value = definition[key];

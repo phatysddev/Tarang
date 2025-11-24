@@ -39,6 +39,23 @@ export interface SchemaDefinition {
     [key: string]: SchemaType;
 }
 
+export type GetTypeFromDataType<T> =
+    T extends DataType<'string'> | DataType<'uuid'> | DataType<'cuid'> ? string :
+    T extends DataType<'number'> ? number :
+    T extends DataType<'boolean'> ? boolean :
+    T extends DataType<'date'> ? Date :
+    T extends DataType<'json'> ? any :
+    never;
+
+export type GetTypeFromDefinition<T> =
+    T extends DataType<any> ? GetTypeFromDataType<T> :
+    T extends { type: infer DT } ? (DT extends DataType<any> ? GetTypeFromDataType<DT> : never) :
+    never;
+
+export type Infer<T> = T extends Schema<infer D> ? {
+    [K in keyof D]: GetTypeFromDefinition<D[K]>
+} : never;
+
 export interface RelationConfig {
     type: 'hasOne' | 'hasMany' | 'belongsTo';
     targetModel: any;

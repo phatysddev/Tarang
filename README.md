@@ -47,7 +47,7 @@ const client = new TarangClient({
 ### 2. Define Schema & Model
  
 ```typescript
-import { Model, Schema, DataTypes } from 'tarang-db';
+import { Model, Schema, DataTypes, Infer } from 'tarang-db';
  
 // Define Schema
 const UserSchema = new Schema({
@@ -64,6 +64,10 @@ const UserSchema = new Schema({
 });
  
 // Define TypeScript Interface
+type User = Infer<typeof UserSchema>;
+
+/*
+Equivalent to:
 interface User {
   id: string;
   name: string;
@@ -72,7 +76,11 @@ interface User {
   birthDate: Date;
   isActive: boolean;
   metadata: any;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt?: Date;
 }
+*/
  
 // Initialize Model
 const userModel = new Model<User>(client, {

@@ -1,4 +1,4 @@
-import { TarangClient, Model, Schema, DataTypes } from '../src';
+import { TarangClient, Model, Schema, DataTypes, Infer } from '../src';
 
 // Example Schema
 const UserSchema = new Schema({
@@ -13,17 +13,7 @@ const UserSchema = new Schema({
     deletedAt: DataTypes.Date.deletedAt(),
 });
 
-interface User {
-    id: string;
-    cuid: string;
-    name: string;
-    email: string;
-    age: number;
-    isActive: boolean;
-    createdAt: string;
-    updatedAt: string;
-    deletedAt?: string;
-}
+type User = Infer<typeof UserSchema>;
 
 // Post Schema
 const PostSchema = new Schema({
@@ -35,12 +25,7 @@ const PostSchema = new Schema({
     updatedAt: DataTypes.Date.updatedAt(),
 });
 
-interface Post {
-    id: number;
-    title: string;
-    content: string;
-    userId: string;
-}
+type Post = Infer<typeof PostSchema>;
 
 async function main() {
     // You need a service account JSON and a spreadsheet ID

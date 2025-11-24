@@ -1,12 +1,12 @@
-export class DataType {
-    constructor(public type: string, public isAutoIncrement: boolean = false) { }
+export class DataType<T extends string = string> {
+    constructor(public type: T, public isAutoIncrement: boolean = false) { }
 
     toString() {
         return this.type;
     }
 }
 
-export class NumberDataType extends DataType {
+export class NumberDataType extends DataType<'number'> {
     constructor(isAutoIncrement: boolean = false) {
         super('number', isAutoIncrement);
     }
@@ -16,7 +16,7 @@ export class NumberDataType extends DataType {
     }
 }
 
-export class DateDataType extends DataType {
+export class DateDataType extends DataType<'date'> {
     constructor(
         public isCreatedAt: boolean = false,
         public isUpdatedAt: boolean = false,
@@ -39,11 +39,11 @@ export class DateDataType extends DataType {
 }
 
 export const DataTypes = {
-    String: new DataType('string'),
+    String: new DataType<'string'>('string'),
     Number: new NumberDataType(),
-    Boolean: new DataType('boolean'),
-    JSON: new DataType('json'),
-    UUID: new DataType('uuid'),
-    CUID: new DataType('cuid'),
+    Boolean: new DataType<'boolean'>('boolean'),
+    JSON: new DataType<'json'>('json'),
+    UUID: new DataType<'uuid'>('uuid'),
+    CUID: new DataType<'cuid'>('cuid'),
     Date: new DateDataType()
 };
