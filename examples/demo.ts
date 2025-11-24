@@ -1,13 +1,13 @@
-import { TarangClient, Model, Schema } from '../src';
+import { TarangClient, Model, Schema, DataTypes } from '../src';
 
 // Example Schema
 const UserSchema: Schema = {
-    id: { type: 'uuid', unique: true }, // Auto-generated UUID
-    cuid: { type: 'cuid', unique: true }, // Auto-generated CUID
-    name: { type: 'string' },
-    email: { type: 'string', unique: true },
-    age: { type: 'number' },
-    isActive: { type: 'boolean', default: true },
+    id: { type: DataTypes.UUID, unique: true }, // Auto-generated UUID
+    cuid: { type: DataTypes.CUID, unique: true }, // Auto-generated CUID
+    name: { type: DataTypes.String },
+    email: { type: DataTypes.String, unique: true },
+    age: { type: DataTypes.Number },
+    isActive: { type: DataTypes.Boolean, default: true },
 };
 
 interface User {
@@ -21,14 +21,14 @@ interface User {
 
 // Post Schema
 const PostSchema: Schema = {
-    id: { type: 'uuid', unique: true },
-    title: { type: 'string' },
-    content: { type: 'string' },
-    userId: { type: 'string' }, // Foreign Key
+    id: { type: DataTypes.Number, autoIncrement: true, unique: true }, // Auto Increment ID
+    title: { type: DataTypes.String },
+    content: { type: DataTypes.String },
+    userId: { type: DataTypes.String }, // Foreign Key
 };
 
 interface Post {
-    id: string;
+    id: number;
     title: string;
     content: string;
     userId: string;

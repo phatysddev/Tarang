@@ -8,12 +8,15 @@ export type SheetConfig = {
     auth: GoogleSheetsAuth;
 };
 
+import { DataType } from './datatypes';
+
 export type ColumnType = 'string' | 'number' | 'boolean' | 'json' | 'uuid' | 'cuid';
 
 export interface ColumnDefinition {
-    type: ColumnType;
+    type: ColumnType | DataType;
     unique?: boolean;
     default?: any;
+    autoIncrement?: boolean;
 }
 
 export interface Schema {

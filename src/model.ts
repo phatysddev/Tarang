@@ -1,5 +1,6 @@
 import { TarangClient } from './client';
 import { ModelConfig, RowData, Schema } from './types';
+import { DataType } from './datatypes';
 import { parseValue, stringifyValue } from './utils';
 import { v4 as uuidv4 } from 'uuid';
 import { createId } from '@paralleldrive/cuid2';
@@ -41,7 +42,8 @@ export class Model<T = any> {
             const value = row[index];
             const columnDef = this.schema[header];
             if (columnDef) {
-                obj[header] = parseValue(value, columnDef.type);
+                const type = columnDef.type instanceof DataType ? columnDef.type.type : columnDef.type as string;
+                obj[header] = parseValue(value, type as any);
             } else {
                 obj[header] = value;
             }
@@ -145,7 +147,7 @@ export class Model<T = any> {
 
     async create(data: Partial<T>): Promise<T> {
         await this.ensureHeaders();
-        const dataWithDefaults = this.prepareDataForCreate(data);
+        const dataWithDefaults = await this.prepareDataForCreate(data);
         const row = this.mapObjectToRow(dataWithDefaults);
         await this.client.appendValues(`${this.sheetName}!A:A`, [row]);
         return dataWithDefaults as T;
@@ -207,21 +209,48 @@ export class Model<T = any> {
         return deletedCount;
     }
 
-    private prepareDataForCreate(data: Partial<T>): any {
+    private async prepareDataForCreate(data: Partial<T>): Promise<any> {
         const dataWithDefaults: any = { ...data };
+
         for (const key in this.schema) {
             const columnDef = this.schema[key];
+            let type: string;
+            let isAutoIncrement = false;
+
+            if (columnDef.type instanceof DataType) {
+                type = columnDef.type.type;
+                isAutoIncrement = columnDef.type.isAutoIncrement || !!columnDef.autoIncrement;
+            } else {
+                type = columnDef.type as string;
+                isAutoIncrement = !!columnDef.autoIncrement;
+            }
+
             if (dataWithDefaults[key] === undefined) {
                 if (columnDef.default !== undefined) {
                     dataWithDefaults[key] = columnDef.default;
-                } else if (columnDef.type === 'uuid') {
+                } else if (isAutoIncrement && type === 'number') {
+                    dataWithDefaults[key] = await this.getNextAutoIncrementValue(key);
+                } else if (type === 'uuid') {
                     dataWithDefaults[key] = uuidv4();
-                } else if (columnDef.type === 'cuid') {
+                } else if (type === 'cuid') {
                     dataWithDefaults[key] = createId();
                 }
             }
         }
         return dataWithDefaults;
+    }
+
+    private async getNextAutoIncrementValue(key: string): Promise<number> {
+        const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
+        if (!rows || rows.length === 0) return 1;
+
+        const items = rows.map((row: any[]) => this.mapRowToObject(row));
+        const max = items.reduce((maxVal: number, item: any) => {
+            const val = item[key];
+            return typeof val === 'number' && val > maxVal ? val : maxVal;
+        }, 0);
+
+        return max + 1;
     }
 
     private matchesFilter(item: T, filter: Partial<T>): boolean {

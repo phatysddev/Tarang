@@ -47,16 +47,19 @@ const client = new TarangClient({
 ### 2. Define Schema & Model
 
 ```typescript
-import { Model, Schema } from 'tarang-db';
+### 2. Define Schema & Model
+
+```typescript
+import { Model, Schema, DataTypes } from 'tarang-db';
 
 // Define Schema
 const UserSchema: Schema = {
-  id: { type: 'uuid', unique: true }, // Auto-generated UUID
-  name: { type: 'string' },
-  email: { type: 'string', unique: true },
-  age: { type: 'number' },
-  isActive: { type: 'boolean', default: true },
-  metadata: { type: 'json' },
+  id: { type: DataTypes.UUID, unique: true }, // Auto-generated UUID
+  name: { type: DataTypes.String },
+  email: { type: DataTypes.String, unique: true },
+  age: { type: DataTypes.Number },
+  isActive: { type: DataTypes.Boolean, default: true },
+  metadata: { type: DataTypes.JSON },
 };
 
 // Define TypeScript Interface
@@ -131,6 +134,14 @@ TarangDB supports defining relationships between models.
 ### Defining Relationships
 
 ```typescript
+// Post Schema with Auto Increment ID
+const PostSchema: Schema = {
+  id: { type: DataTypes.Number, autoIncrement: true, unique: true },
+  title: { type: DataTypes.String },
+  content: { type: DataTypes.String },
+  userId: { type: DataTypes.String },
+};
+
 // Post Model
 const postModel = new Model<Post>(client, {
   sheetName: 'Posts',
@@ -167,12 +178,26 @@ console.log(userWithPosts.posts); // Array of Post objects
 
 ## API Reference
 
+### `DataTypes`
+Use `DataTypes` to define your schema.
+
+- `DataTypes.String`
+- `DataTypes.Number`
+- `DataTypes.Boolean`
+- `DataTypes.JSON`
+- `DataTypes.UUID`
+- `DataTypes.CUID`
+
+**Methods:**
+- `DataTypes.Number.autoIncrement()`: Creates an auto-incrementing number column.
+
 ### `Schema` Configuration
 | Property | Type | Description |
 |----------|------|-------------|
-| `type` | `'string' \| 'number' \| 'boolean' \| 'json' \| 'uuid' \| 'cuid'` | Data type of the column. |
+| `type` | `DataType` | Data type of the column. |
 | `unique` | `boolean` | (Optional) Whether values must be unique. |
 | `default` | `any` | (Optional) Default value if not provided. |
+| `autoIncrement` | `boolean` | (Optional) Set to true for auto-incrementing numbers. |
 
 ### `Model` Methods
 
