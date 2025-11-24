@@ -1,5 +1,5 @@
 import { TarangClient } from './client';
-import { ModelConfig, RelationConfig } from './types';
+import { ModelConfig, RelationConfig, Filter, FilterOperator } from './types';
 import { DataType, DateDataType } from './datatypes';
 import { parseValue, stringifyValue } from './utils';
 import { v4 as uuidv4 } from 'uuid';
@@ -57,7 +57,7 @@ export class Model<T = any> {
         });
     }
 
-    async findMany(filter?: Partial<T>, options?: { include?: Record<string, boolean>, select?: Record<string, boolean>, limit?: number, skip?: number, includeDeleted?: boolean, sortBy?: keyof T, sortOrder?: 'asc' | 'desc' }): Promise<Partial<T>[]> {
+    async findMany(filter?: Filter<T>, options?: { include?: Record<string, boolean>, select?: Record<string, boolean>, limit?: number, skip?: number, includeDeleted?: boolean, sortBy?: keyof T, sortOrder?: 'asc' | 'desc' }): Promise<Partial<T>[]> {
         await this.ensureHeaders();
         const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
         if (!rows) return [];
@@ -97,7 +97,7 @@ export class Model<T = any> {
         return results;
     }
 
-    private applyFilter(results: T[], filter: Partial<T>): T[] {
+    private applyFilter(results: T[], filter: Filter<T>): T[] {
         return results.filter((item: T) => this.matchesFilter(item, filter));
     }
 
@@ -163,7 +163,7 @@ export class Model<T = any> {
         });
     }
 
-    async findFirst(filter: Partial<T>, options?: { include?: Record<string, boolean>, select?: Record<string, boolean>, skip?: number, includeDeleted?: boolean }): Promise<Partial<T> | null> {
+    async findFirst(filter: Filter<T>, options?: { include?: Record<string, boolean>, select?: Record<string, boolean>, skip?: number, includeDeleted?: boolean }): Promise<Partial<T> | null> {
         const results = await this.findMany(filter, { ...options, limit: 1 });
         return results.length > 0 ? results[0] : null;
     }
@@ -176,7 +176,7 @@ export class Model<T = any> {
         return dataWithDefaults as T;
     }
 
-    async update(filter: Partial<T>, data: Partial<T>): Promise<T[]> {
+    async update(filter: Filter<T>, data: Partial<T>): Promise<T[]> {
         await this.ensureHeaders();
         const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
         if (!rows) return [];
@@ -214,7 +214,7 @@ export class Model<T = any> {
         return updatedItems;
     }
 
-    async delete(filter: Partial<T>, options?: { force?: boolean }): Promise<number> {
+    async delete(filter: Filter<T>, options?: { force?: boolean }): Promise<number> {
         await this.ensureHeaders();
         const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
         if (!rows) return 0;
@@ -341,10 +341,24 @@ export class Model<T = any> {
         return max + 1;
     }
 
-    private matchesFilter(item: T, filter: Partial<T>): boolean {
+    private matchesFilter(item: T, filter: Filter<T>): boolean {
         for (const key in filter) {
-            if (item[key as keyof T] !== filter[key]) {
-                return false;
+            const filterValue = filter[key];
+            const itemValue = item[key as keyof T];
+
+            if (typeof filterValue === 'object' && filterValue !== null && !Array.isArray(filterValue) && !(filterValue instanceof Date)) {
+                // Handle comparison operators
+                const ops = filterValue as FilterOperator<any>;
+                if (ops.gt !== undefined && !(itemValue > ops.gt)) return false;
+                if (ops.lt !== undefined && !(itemValue < ops.lt)) return false;
+                if (ops.gte !== undefined && !(itemValue >= ops.gte)) return false;
+                if (ops.lte !== undefined && !(itemValue <= ops.lte)) return false;
+                if (ops.ne !== undefined && itemValue === ops.ne) return false;
+            } else {
+                // Exact match
+                if (itemValue !== filterValue) {
+                    return false;
+                }
             }
         }
         return true;

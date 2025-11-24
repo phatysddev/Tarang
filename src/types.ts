@@ -68,3 +68,15 @@ export interface ModelConfig {
     schema: Schema;
     relations?: Record<string, RelationConfig>;
 }
+
+export type FilterOperator<T> = {
+    gt?: T;
+    lt?: T;
+    gte?: T;
+    lte?: T;
+    ne?: T;
+};
+
+export type Filter<T> = {
+    [P in keyof T]?: T[P] | FilterOperator<T[P]>;
+};

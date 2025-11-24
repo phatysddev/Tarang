@@ -125,6 +125,30 @@ const pagedUsers = await userModel.findMany(
 const allUsers = await userModel.findMany(undefined, { includeDeleted: true });
 ```
 
+#### Advanced Filtering
+You can use comparison operators for more complex queries:
+- `gt`: Greater than
+- `lt`: Less than
+- `gte`: Greater than or equal
+- `lte`: Less than or equal
+- `ne`: Not equal
+
+```typescript
+// Find users older than 25
+const olderUsers = await userModel.findMany({ age: { gt: 25 } });
+
+// Find users aged between 20 and 30
+const youngAdults = await userModel.findMany({ 
+  age: { gte: 20, lte: 30 } 
+});
+
+// Find active users who are NOT 'Alice'
+const otherActiveUsers = await userModel.findMany({ 
+  isActive: true,
+  name: { ne: 'Alice' }
+});
+```
+
 #### Find First
 ```typescript
 const user = await userModel.findFirst({ email: 'alice@example.com' });
