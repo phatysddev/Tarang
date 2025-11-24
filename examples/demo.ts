@@ -7,6 +7,7 @@ const UserSchema = new Schema({
     name: DataTypes.String, // Shorthand
     email: { type: DataTypes.String, unique: true },
     age: DataTypes.Number, // Shorthand
+    birthDate: DataTypes.Date, // Plain Date field
     isActive: { type: DataTypes.Boolean, default: true },
     createdAt: DataTypes.Date.createdAt(),
     updatedAt: DataTypes.Date.updatedAt(),
@@ -55,48 +56,52 @@ async function main() {
         },
     });
 
-    // Create User
+    // 1. Create User
+    console.log('--- Creating User ---');
     const newUser = await userModel.create({
         name: 'John Doe',
         email: 'john@example.com',
         age: 30,
+        birthDate: new Date('1995-05-15'),
     });
     console.log('Created User:', newUser);
 
-    // Create Post
+    // 2. Create Post
+    console.log('\n--- Creating Post ---');
     await postModel.create({
         title: 'Hello World',
         content: 'This is my first post',
         userId: newUser.id,
     });
+    console.log('Created Post for User');
 
-    // Find User with Posts
+    // 3. Find User with Posts (Relations)
+    console.log('\n--- Find User with Posts ---');
     const userWithPosts = await userModel.findFirst(
         { email: 'john@example.com' },
         { include: { posts: true } }
     );
     console.log('User with Posts:', userWithPosts);
 
-    // Find Many Users
+    // 4. Find Many Users
+    console.log('\n--- Find All Users ---');
     const allUsers = await userModel.findMany();
     console.log('All Users:', allUsers);
 
-    // Update User
+    // 5. Update User
+    console.log('\n--- Updating User ---');
     const updatedUsers = await userModel.update(
         { email: 'john@example.com' },
         { age: 31, isActive: false }
     );
     console.log('Updated User:', updatedUsers);
 
-    // Delete User
-    // const deletedCount = await userModel.delete({ email: 'john@example.com' });
-    // console.log('Deleted Users Count:', deletedCount);
-
-    // Find with Pagination, Selection, and Sorting
+    // 6. Find with Pagination, Selection, and Sorting
+    console.log('\n--- Find with Pagination, Selection, and Sorting ---');
     const pagedUsers = await userModel.findMany(
-        { isActive: true },
+        { isActive: false },
         {
-            select: { name: true, email: true },
+            select: { name: true, email: true, age: true },
             limit: 10,
             skip: 0,
             sortBy: 'age',
@@ -105,13 +110,30 @@ async function main() {
     );
     console.log('Paged Users (Sorted by Age desc):', pagedUsers);
 
-    // Find Many Users with Select
-    const selectedUsers = await userModel.findMany(undefined, {
-        select: { name: true, email: true },
-        limit: 2,
-        skip: 0
-    });
-    console.log('Selected Users (Name & Email only, Limit 2):', selectedUsers);
+    // 7. Soft Delete User
+    console.log('\n--- Soft Deleting User ---');
+    const deletedCount = await userModel.delete({ email: 'john@example.com' });
+    console.log('Soft Deleted Count:', deletedCount);
+
+    // 8. Verify Soft Delete (Should not find it)
+    const foundAfterDelete = await userModel.findFirst({ email: 'john@example.com' });
+    console.log('Found after soft delete (should be null):', foundAfterDelete);
+
+    // 9. Find Including Deleted
+    console.log('\n--- Find Including Deleted ---');
+    const deletedUsers = await userModel.findMany(
+        { email: 'john@example.com' },
+        { includeDeleted: true }
+    );
+    console.log('Found deleted users:', deletedUsers);
+
+    // 10. Hard Delete (Cleanup)
+    console.log('\n--- Hard Deleting User (Cleanup) ---');
+    const hardDeletedCount = await userModel.delete(
+        { email: 'john@example.com' },
+        { force: true }
+    );
+    console.log('Hard Deleted Count:', hardDeletedCount);
 }
 
-// main().catch(console.error);
+main().catch(console.error);
