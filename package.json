@@ -1,6 +1,6 @@
 {
   "name": "tarang-db",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "A Google Sheets ORM for Node.js and Bun",
   "keywords": [
     "google-sheets",
@@ -12,6 +12,14 @@
   ],
   "author": "",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/phatysddev/Tarang.git"
+  },
+  "bugs": {
+    "url": "https://github.com/phatysddev/Tarang/issues"
+  },
+  "homepage": "https://github.com/phatysddev/Tarang#readme",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
