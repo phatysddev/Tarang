@@ -229,6 +229,60 @@ const userWithPosts = await userModel.findFirst(
 console.log(userWithPosts.posts); // Array of Post objects
 ```
 
+### `belongsTo` Relationship
+
+You can also define the inverse relationship on the Post model.
+
+```typescript
+const postModel = new Model<Post>(client, {
+  sheetName: 'Posts',
+  schema: PostSchema,
+  relations: {
+    author: {
+      type: 'belongsTo',
+      targetModel: userModel,
+      foreignKey: 'userId', // Column in Post table
+      localKey: 'id',       // Column in User table
+    }
+  }
+});
+
+// Fetch post with author
+const postWithAuthor = await postModel.findFirst(
+  { title: 'Hello World' },
+  { include: { author: true } }
+);
+
+console.log(postWithAuthor.author); // User object
+```
+
+### Batch Operations
+
+#### `createMany`
+Create multiple records in a single API call.
+
+```typescript
+const users = await userModel.createMany([
+  { name: 'Bob', email: 'bob@example.com', age: 30 },
+  { name: 'Charlie', email: 'charlie@example.com', age: 35 },
+]);
+```
+
+### Upsert
+Update a record if it exists, or create it if it doesn't.
+
+```typescript
+const user = await userModel.upsert({
+  where: { email: 'alice@example.com' },
+  update: { age: 26 },
+  create: { 
+    name: 'Alice', 
+    email: 'alice@example.com', 
+    age: 26 
+  },
+});
+```
+
 ## API Reference
 
 ### `DataTypes`

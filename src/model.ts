@@ -176,6 +176,34 @@ export class Model<T = any> {
         return dataWithDefaults as T;
     }
 
+    async createMany(data: Partial<T>[]): Promise<T[]> {
+        await this.ensureHeaders();
+        const createdItems: T[] = [];
+        const rows: any[][] = [];
+
+        for (const item of data) {
+            const dataWithDefaults = await this.prepareDataForCreate(item);
+            createdItems.push(dataWithDefaults as T);
+            rows.push(this.mapObjectToRow(dataWithDefaults));
+        }
+
+        if (rows.length > 0) {
+            await this.client.appendValues(`${this.sheetName}!A:A`, rows);
+        }
+
+        return createdItems;
+    }
+
+    async upsert(args: { where: Filter<T>, update: Partial<T>, create: Partial<T> }): Promise<T> {
+        const existingItem = await this.findFirst(args.where);
+        if (existingItem) {
+            const updatedItems = await this.update(args.where, args.update);
+            return updatedItems[0];
+        } else {
+            return this.create(args.create);
+        }
+    }
+
     async update(filter: Filter<T>, data: Partial<T>): Promise<T[]> {
         await this.ensureHeaders();
         const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
@@ -189,26 +217,28 @@ export class Model<T = any> {
             updateData[updatedAtField] = new Date().toISOString();
         }
 
-        for (let i = 0; i < rows.length; i++) {
-            const row = rows[i];
+        let hasChanges = false;
+        const newRows = rows.map((row: any[]) => {
             const item = this.mapRowToObject(row);
-
-            // Skip soft-deleted items from update unless we want to allow updating deleted items?
-            // Usually we don't update deleted items.
             const deletedAtField = this.getDeletedAtField();
+
+            // Skip soft-deleted items from update
             if (deletedAtField && (item as any)[deletedAtField]) {
-                continue;
+                return row;
             }
 
             if (this.matchesFilter(item, filter)) {
                 const updatedItem = { ...item, ...updateData };
                 updatedItems.push(updatedItem);
-                const newRow = this.mapObjectToRow(updatedItem);
-
-                // Row index is i + 2 (1 for header, 1 for 0-based index)
-                const rowIndex = i + 2;
-                await this.client.updateValues(`${this.sheetName}!A${rowIndex}`, [newRow]);
+                hasChanges = true;
+                return this.mapObjectToRow(updatedItem);
             }
+
+            return row;
+        });
+
+        if (hasChanges) {
+            await this.client.updateValues(`${this.sheetName}!A2`, newRows);
         }
 
         return updatedItems;
@@ -224,22 +254,25 @@ export class Model<T = any> {
         // If soft delete is enabled and not forced, perform soft delete
         if (deletedAtField && !options?.force) {
             let deletedCount = 0;
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
+            let hasChanges = false;
+            const newRows = rows.map((row: any[]) => {
                 const item = this.mapRowToObject(row);
 
                 if (this.matchesFilter(item, filter)) {
                     // Skip if already deleted
-                    if ((item as any)[deletedAtField]) continue;
+                    if ((item as any)[deletedAtField]) return row;
 
                     const updatedItem: any = { ...item };
                     updatedItem[deletedAtField] = new Date().toISOString();
-
-                    const newRow = this.mapObjectToRow(updatedItem);
-                    const rowIndex = i + 2;
-                    await this.client.updateValues(`${this.sheetName}!A${rowIndex}`, [newRow]);
                     deletedCount++;
+                    hasChanges = true;
+                    return this.mapObjectToRow(updatedItem);
                 }
+                return row;
+            });
+
+            if (hasChanges) {
+                await this.client.updateValues(`${this.sheetName}!A2`, newRows);
             }
             return deletedCount;
         }
