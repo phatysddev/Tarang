@@ -61,3 +61,13 @@ export type Filter<T> = {
 export type AllowFormulas<T> = {
     [K in keyof T]: T[K] | string;
 };
+
+export interface FindOptions<T> {
+    select?: Record<string, boolean>;
+    include?: Record<string, boolean | FindOptions<any>>;
+    limit?: number;
+    skip?: number;
+    includeDeleted?: boolean;
+    sortBy?: keyof T;
+    sortOrder?: 'asc' | 'desc';
+}

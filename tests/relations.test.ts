@@ -111,4 +111,28 @@ describe("Model Relations", () => {
         expect(post3).toBeDefined();
         expect((post3 as any).author.name).toBe('Bob');
     });
+    test("should load nested include with select", async () => {
+        const users = await userModel.findMany({}, {
+            include: {
+                posts: {
+                    select: { title: true }
+                }
+            }
+        });
+
+        expect(users.length).toBe(2);
+
+        const alice = users.find(u => u.name === 'Alice');
+        expect(alice).toBeDefined();
+        expect((alice as any).posts).toBeDefined();
+        expect((alice as any).posts.length).toBe(2);
+        // Should have title
+        expect((alice as any).posts[0].title).toBe('Alice Post 1');
+
+        // 'id' should be undefined as it wasn't selected
+        expect((alice as any).posts[0].id).toBeUndefined();
+
+        // 'userId' (foreign key) should be defined because we force-selected it
+        expect((alice as any).posts[0].userId).toBeDefined();
+    });
 });

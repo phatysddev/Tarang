@@ -277,7 +277,62 @@ const postModel = new Model<Post>(client, {
 // Query with relations
 const userWithPosts = await userModel.findFirst(
   { email: 'alice@example.com' }, 
-  { include: { posts: true } }
+  { 
+    include: { 
+      posts: true,
+      // Nested include with select
+      profile: {
+        select: { bio: true }
+      }
+    } 
+  }
+);
+```
+
+## Advanced Operations
+
+### Create Many
+
+Batch create multiple records efficiently.
+
+```typescript
+const users = await userModel.createMany([
+  { name: 'Bob', email: 'bob@example.com' },
+  { name: 'Charlie', email: 'charlie@example.com' },
+]);
+```
+
+### Upsert
+
+Create a record if it doesn't exist, or update it if it does.
+
+```typescript
+const user = await userModel.upsert({
+  where: { email: 'alice@example.com' },
+  update: { age: 27 },
+  create: { 
+    name: 'Alice', 
+    email: 'alice@example.com', 
+    age: 26 
+  },
+});
+```
+
+### Soft Delete
+
+If your schema includes a `deletedAt` field using `DataTypes.Date.deletedAt()`, the `delete` method will perform a soft delete by default.
+
+```typescript
+// Soft delete (sets deletedAt timestamp)
+await userModel.delete({ email: 'alice@example.com' });
+
+// Hard delete (permanently removes the row)
+await userModel.delete({ email: 'alice@example.com' }, { force: true });
+
+// Include soft-deleted records in queries
+const allUsersIncludingDeleted = await userModel.findMany(
+  {}, 
+  { includeDeleted: true }
 );
 ```
 
@@ -294,6 +349,8 @@ await productModel.create({
   total: '=INDIRECT("R[0]C[-2]", FALSE) * INDIRECT("R[0]C[-1]", FALSE)' 
 });
 ```
+
+
 
 ## License
 

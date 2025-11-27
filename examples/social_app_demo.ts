@@ -179,6 +179,26 @@ async function main() {
         console.log(`   "${p.title}" by ${author ? author.username : 'Unknown'}`);
     });
 
+    // 6. Fetch User with Nested Include (Profile only selecting bio)
+    console.log('\n🔍 Fetching tech_guru with Profile (Bio only)...');
+    const userWithBio = await userModel.findFirst(
+        { username: 'tech_guru' },
+        {
+            include: {
+                profile: {
+                    select: { bio: true }
+                }
+            }
+        }
+    );
+
+    if (userWithBio) {
+        const profile = (userWithBio as any).profile;
+        console.log(`   User: ${userWithBio.username}`);
+        console.log(`   Bio: ${profile?.bio}`);
+        console.log(`   Website: ${profile?.website} (Should be undefined)`);
+    }
+
     console.log('\n✅ Social App Demo Complete!');
 }
 

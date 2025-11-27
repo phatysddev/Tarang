@@ -1,5 +1,5 @@
 import { TarangClient } from './client';
-import { ModelConfig, RelationConfig, Filter, FilterOperator, AllowFormulas } from './types';
+import { ModelConfig, RelationConfig, Filter, FilterOperator, AllowFormulas, FindOptions } from './types';
 import { DataType, DateDataType } from './datatypes';
 import { parseValue, stringifyValue } from './utils';
 import { v4 as uuidv4 } from 'uuid';
@@ -57,7 +57,7 @@ export class Model<T = any> {
         });
     }
 
-    async findMany(filter?: Filter<T>, options?: { include?: Record<string, boolean>, select?: Record<string, boolean>, limit?: number, skip?: number, includeDeleted?: boolean, sortBy?: keyof T, sortOrder?: 'asc' | 'desc' }): Promise<Partial<T>[]> {
+    async findMany(filter?: Filter<T>, options?: FindOptions<T>): Promise<Partial<T>[]> {
         await this.ensureHeaders();
         const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
         if (!rows) return [];
@@ -122,7 +122,7 @@ export class Model<T = any> {
         });
     }
 
-    private async loadRelations(results: any[], include: Record<string, boolean>) {
+    private async loadRelations(results: any[], include: Record<string, boolean | FindOptions<any>>) {
         const relationsToFetch = Object.keys(include).filter(
             key => include[key] && this.relations[key]
         );
@@ -130,9 +130,22 @@ export class Model<T = any> {
         await Promise.all(relationsToFetch.map(async (relationName) => {
             const relation = this.relations[relationName];
             const targetModel = relation.targetModel as Model<any>;
+            const includeValue = include[relationName];
+
+            // Determine options for the related model query
+            let relatedOptions: FindOptions<any> = {};
+            if (typeof includeValue === 'object') {
+                relatedOptions = { ...(includeValue as FindOptions<any>) };
+            }
+
+            // Ensure foreign key is selected if select is present, otherwise we can't match relations
+            if (relatedOptions.select) {
+                relatedOptions.select[relation.foreignKey] = true;
+            }
 
             // Fetch all related records once to avoid N+1 problem
-            const allRelatedRecords = await targetModel.findMany();
+            // We pass the nested options here!
+            const allRelatedRecords = await targetModel.findMany(undefined, relatedOptions);
 
             results.forEach((item: any) => {
                 const localValue = item[relation.localKey];
@@ -163,7 +176,7 @@ export class Model<T = any> {
         });
     }
 
-    async findFirst(filter: Filter<T>, options?: { include?: Record<string, boolean>, select?: Record<string, boolean>, skip?: number, includeDeleted?: boolean }): Promise<Partial<T> | null> {
+    async findFirst(filter: Filter<T>, options?: FindOptions<T>): Promise<Partial<T> | null> {
         const results = await this.findMany(filter, { ...options, limit: 1 });
         return results.length > 0 ? results[0] : null;
     }
