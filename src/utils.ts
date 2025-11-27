@@ -1,5 +1,5 @@
 export function formatPrivateKey(key: string): string {
-    return key.replace(/\\n/g, '\n');
+    return key.replaceAll(String.raw`\n`, '\n');
 }
 
 export function parseValue(value: string, type: string): any {

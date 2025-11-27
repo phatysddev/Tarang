@@ -7,10 +7,10 @@ import { createId } from '@paralleldrive/cuid2';
 import { Schema } from './schema';
 
 export class Model<T = any> {
-    private client: TarangClient;
-    private sheetName: string;
-    private schema: Schema;
-    private relations: Record<string, RelationConfig> = {};
+    private readonly client: TarangClient;
+    private readonly sheetName: string;
+    private readonly schema: Schema;
+    private readonly relations: Record<string, RelationConfig> = {};
     private headers: string[] = [];
 
     constructor(client: TarangClient, config: ModelConfig) {
@@ -283,10 +283,10 @@ export class Model<T = any> {
 
         rows.forEach((row: any[]) => {
             const item = this.mapRowToObject(row);
-            if (!this.matchesFilter(item, filter)) {
-                keptRows.push(row);
-            } else {
+            if (this.matchesFilter(item, filter)) {
                 deletedCount++;
+            } else {
+                keptRows.push(row);
             }
         });
 
@@ -319,7 +319,6 @@ export class Model<T = any> {
                 }
             } else {
                 type = 'string';
-                isAutoIncrement = false;
             }
 
             if (dataWithDefaults[key] === undefined) {
@@ -375,8 +374,8 @@ export class Model<T = any> {
     }
 
     private createLikeRegex(pattern: string): RegExp {
-        const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regexString = '^' + escapedPattern.replace(/%/g, '.*').replace(/_/g, '.') + '$';
+        const escapedPattern = pattern.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+        const regexString = '^' + escapedPattern.replaceAll('%', '.*').replaceAll('_', '.') + '$';
         return new RegExp(regexString);
     }
 
@@ -388,10 +387,10 @@ export class Model<T = any> {
             if (typeof filterValue === 'object' && filterValue !== null && !Array.isArray(filterValue) && !(filterValue instanceof Date)) {
                 // Handle comparison operators
                 const ops = filterValue as FilterOperator<any>;
-                if (ops.gt !== undefined && !(itemValue > ops.gt)) return false;
-                if (ops.lt !== undefined && !(itemValue < ops.lt)) return false;
-                if (ops.gte !== undefined && !(itemValue >= ops.gte)) return false;
-                if (ops.lte !== undefined && !(itemValue <= ops.lte)) return false;
+                if (ops.gt !== undefined && itemValue <= ops.gt) return false;
+                if (ops.lt !== undefined && itemValue >= ops.lt) return false;
+                if (ops.gte !== undefined && itemValue < ops.gte) return false;
+                if (ops.lte !== undefined && itemValue > ops.lte) return false;
                 if (ops.ne !== undefined && itemValue === ops.ne) return false;
                 if (ops.like !== undefined) {
                     if (typeof itemValue !== 'string') return false;
@@ -403,11 +402,9 @@ export class Model<T = any> {
                     const regex = this.createLikeRegex(ops.ilike);
                     if (!new RegExp(regex.source, 'i').test(itemValue)) return false;
                 }
-            } else {
+            } else if (itemValue !== filterValue) {
                 // Exact match
-                if (itemValue !== filterValue) {
-                    return false;
-                }
+                return false;
             }
         }
         return true;

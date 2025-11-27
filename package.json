@@ -1,6 +1,7 @@
 {
   "name": "tarang-db",
   "version": "0.1.8",
+  "type": "module",
   "description": "A Google Sheets ORM for Node.js and Bun",
   "keywords": [
     "google-sheets",
@@ -34,22 +35,22 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "build": "tsdown",
+    "dev": "tsdown --watch",
     "test": "bun test",
     "prepublishOnly": "bun run build"
-  },
-  "devDependencies": {
-    "@types/bun": "latest",
-    "@types/node": "^24.10.1",
-    "@types/uuid": "^11.0.0",
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
   },
   "dependencies": {
     "@paralleldrive/cuid2": "^3.0.4",
     "google-auth-library": "^10.5.0",
     "googleapis": "^166.0.0",
     "uuid": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^24.10.1",
+    "@types/uuid": "^11.0.0",
+    "tsdown": "^0.16.7",
+    "typescript": "^5.9.3"
   }
 }

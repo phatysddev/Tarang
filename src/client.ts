@@ -4,12 +4,12 @@ import { SheetConfig } from './types';
 import { formatPrivateKey } from './utils';
 
 export class TarangClient {
-    private auth: JWT;
-    private spreadsheetId: string;
+    private readonly auth: JWT;
+    private readonly spreadsheetId: string;
     public sheets: any;
-    private cache: Map<string, { data: any, timestamp: number }> = new Map();
-    private cacheTTL: number;
-    private maxCacheSize: number;
+    private readonly cache: Map<string, { data: any, timestamp: number }> = new Map();
+    private readonly cacheTTL: number;
+    private readonly maxCacheSize: number;
 
     constructor(config: SheetConfig) {
         this.spreadsheetId = config.spreadsheetId;
@@ -21,8 +21,8 @@ export class TarangClient {
 
         this.sheets = google.sheets({ version: 'v4', auth: this.auth });
 
-        this.cacheTTL = config.cacheTTL !== undefined ? config.cacheTTL : 60000;
-        this.maxCacheSize = config.maxCacheSize !== undefined ? config.maxCacheSize : 100;
+        this.cacheTTL = config.cacheTTL ?? 60000;
+        this.maxCacheSize = config.maxCacheSize ?? 100;
     }
 
     private invalidateCache(range: string) {
