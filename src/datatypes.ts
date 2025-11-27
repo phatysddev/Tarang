@@ -47,3 +47,31 @@ export const DataTypes = {
     CUID: new DataType<'cuid'>('cuid'),
     Date: new DateDataType()
 };
+
+export interface BaseColumnDefinition {
+    unique?: boolean;
+    default?: any;
+}
+
+export interface NumberColumnDefinition extends BaseColumnDefinition {
+    type: NumberDataType;
+    autoIncrement?: boolean;
+}
+
+export interface DateColumnDefinition extends BaseColumnDefinition {
+    type: DateDataType;
+    autoIncrement?: never;
+}
+
+export interface OtherColumnDefinition extends BaseColumnDefinition {
+    type: DataType;
+    autoIncrement?: never;
+}
+
+export type ColumnDefinition = NumberColumnDefinition | DateColumnDefinition | OtherColumnDefinition;
+
+export type SchemaType = ColumnDefinition | DataType | NumberDataType | DateDataType;
+
+export interface SchemaDefinition {
+    [key: string]: SchemaType;
+}

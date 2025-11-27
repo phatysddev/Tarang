@@ -1,4 +1,4 @@
-import { SchemaDefinition, ColumnDefinition } from './types';
+import { SchemaDefinition, ColumnDefinition } from './datatypes';
 import { DataType, NumberDataType, DateDataType } from './datatypes';
 
 export class Schema<T extends SchemaDefinition = SchemaDefinition> {
