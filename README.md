@@ -13,6 +13,7 @@ Turn your Google Sheets into a database with a simple, familiar API.
 - **Relationships**: Define `hasOne`, `hasMany`, and `belongsTo` relationships.
 - **Eager Loading**: Fetch related data easily with `include`.
 - **Advanced Querying**: Support for filtering, `select`, `limit`, `skip`, `sortBy`, and `sortOrder`.
+- **Formula Support**: Pass Google Sheets formulas to any field for calculated columns.
 - **Cross-Platform**: Works seamlessly in Node.js and Bun.
 
 ## Installation
@@ -68,22 +69,6 @@ const UserSchema = new Schema({
 // Infer TypeScript Interface
 type User = Infer<typeof UserSchema>;
 
-/*
-Equivalent to:
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  age: number;
-  birthDate: Date;
-  isActive: boolean;
-  metadata: any;
-  createdAt: Date;
-  updatedAt: Date;
-  deletedAt?: Date;
-}
-*/
-
 // Initialize Model
 const userModel = new Model<User>(client, {
   sheetName: 'Users', // Name of the tab in Google Sheets
@@ -91,185 +76,99 @@ const userModel = new Model<User>(client, {
 });
 ```
 
-### 3. CRUD Operations
+## Schema Definition
 
-#### Create
+TarangDB uses a schema definition object where keys are column names and values are column definitions.
+
+### Data Types
+
+| Type | Description |
+|------|-------------|
+| `DataTypes.String` | Text string |
+| `DataTypes.Number` | Numeric value |
+| `DataTypes.Boolean` | Boolean value (true/false) |
+| `DataTypes.Date` | Date object (stored as ISO string) |
+| `DataTypes.JSON` | JSON object (stored as stringified JSON) |
+| `DataTypes.UUID` | UUID v4 string |
+| `DataTypes.CUID` | CUID string |
+
+### Modifiers
+
+| Modifier | Description |
+|----------|-------------|
+| `unique` | Ensures values in the column are unique. |
+| `default` | Sets a default value if none is provided. |
+| `autoIncrement` | (Number only) Auto-increments the value. |
+| `createdAt()` | (Date only) Sets current date on creation. |
+| `updatedAt()` | (Date only) Updates date on modification. |
+| `deletedAt()` | (Date only) Used for soft deletes. |
+
+## CRUD Operations
+
+### Create
+
 ```typescript
-const newUser = await userModel.create({
+const user = await userModel.create({
   name: 'Alice',
   email: 'alice@example.com',
   age: 25,
-  birthDate: new Date('1998-01-01'),
-  metadata: { role: 'admin' },
 });
 ```
 
-#### Find Many
-```typescript
-// Find all users aged 25
-const users = await userModel.findMany({ age: 25 });
+### Create Many
 
-// Find with Pagination, Selection, and Sorting
+Batch create multiple records.
+
+```typescript
+const users = await userModel.createMany([
+  { name: 'Bob', email: 'bob@example.com' },
+  { name: 'Charlie', email: 'charlie@example.com' },
+]);
+```
+
+### Read (Find Many)
+
+```typescript
+// Find all
+const allUsers = await userModel.findMany();
+
+// Filter
+const adults = await userModel.findMany({ age: { gte: 18 } });
+
+// Pagination & Sorting
 const pagedUsers = await userModel.findMany(
   { isActive: true },
   { 
-    select: { name: true, email: true },
-    limit: 10,
-    skip: 0,
-    sortBy: 'age',
-    sortOrder: 'desc'
+    limit: 10, 
+    skip: 0, 
+    sortBy: 'createdAt', 
+    sortOrder: 'desc' 
   }
 );
 
-// Find including soft-deleted records
-const allUsers = await userModel.findMany(undefined, { includeDeleted: true });
+// Select specific fields
+const namesOnly = await userModel.findMany({}, { select: { name: true } });
 ```
 
-#### Advanced Filtering
-You can use comparison operators for more complex queries:
-- `gt`: Greater than
-- `lt`: Less than
-- `gte`: Greater than or equal
-- `lte`: Less than or equal
-- `ne`: Not equal
+### Read (Find First)
 
-```typescript
-// Find users older than 25
-const olderUsers = await userModel.findMany({ age: { gt: 25 } });
-
-// Find users aged between 20 and 30
-const youngAdults = await userModel.findMany({ 
-  age: { gte: 20, lte: 30 } 
-});
-
-// Find active users who are NOT 'Alice'
-const otherActiveUsers = await userModel.findMany({ 
-  isActive: true,
-  name: { ne: 'Alice' }
-});
-```
-
-#### Find First
 ```typescript
 const user = await userModel.findFirst({ email: 'alice@example.com' });
 ```
 
-#### Update
+### Update
+
 ```typescript
-// Update all users named 'Alice'
-// updatedAt will be automatically set
-const updatedUsers = await userModel.update(
-  { name: 'Alice' }, 
+// Update by filter
+const updated = await userModel.update(
+  { email: 'alice@example.com' },
   { age: 26 }
 );
 ```
 
-#### Delete
-```typescript
-// Soft delete (sets deletedAt)
-const deletedCount = await userModel.delete({ email: 'alice@example.com' });
-
-// Hard delete (removes row)
-const hardDeletedCount = await userModel.delete(
-  { email: 'alice@example.com' }, 
-  { force: true }
-);
-```
-
-## Relationships
-
-TarangDB supports defining relationships between models.
-
-### Defining Relationships
-
-```typescript
-// Post Schema with Auto Increment ID
-const PostSchema = new Schema({
-  id: { type: DataTypes.Number, autoIncrement: true, unique: true },
-  title: DataTypes.String,
-  content: DataTypes.String,
-  userId: DataTypes.String,
-  createdAt: DataTypes.Date.createdAt(),
-  updatedAt: DataTypes.Date.updatedAt(),
-});
-
-type Post = Infer<typeof PostSchema>;
-
-// Post Model
-const postModel = new Model<Post>(client, {
-  sheetName: 'Posts',
-  schema: PostSchema,
-});
-
-// User Model with Relations
-const userModel = new Model<User>(client, {
-  sheetName: 'Users',
-  schema: UserSchema,
-  relations: {
-    posts: {
-      type: 'hasMany',
-      targetModel: postModel,
-      foreignKey: 'userId', // Column in Post table
-      localKey: 'id',       // Column in User table
-    },
-  },
-});
-```
-
-### Querying with Relations
-
-Use the `include` option to fetch related data.
-
-```typescript
-const userWithPosts = await userModel.findFirst(
-  { email: 'alice@example.com' },
-  { include: { posts: true } }
-);
-
-console.log(userWithPosts.posts); // Array of Post objects
-```
-
-### `belongsTo` Relationship
-
-You can also define the inverse relationship on the Post model.
-
-```typescript
-const postModel = new Model<Post>(client, {
-  sheetName: 'Posts',
-  schema: PostSchema,
-  relations: {
-    author: {
-      type: 'belongsTo',
-      targetModel: userModel,
-      foreignKey: 'userId', // Column in Post table
-      localKey: 'id',       // Column in User table
-    }
-  }
-});
-
-// Fetch post with author
-const postWithAuthor = await postModel.findFirst(
-  { title: 'Hello World' },
-  { include: { author: true } }
-);
-
-console.log(postWithAuthor.author); // User object
-```
-
-### Batch Operations
-
-#### `createMany`
-Create multiple records in a single API call.
-
-```typescript
-const users = await userModel.createMany([
-  { name: 'Bob', email: 'bob@example.com', age: 30 },
-  { name: 'Charlie', email: 'charlie@example.com', age: 35 },
-]);
-```
-
 ### Upsert
-Update a record if it exists, or create it if it doesn't.
+
+Create if not exists, otherwise update.
 
 ```typescript
 const user = await userModel.upsert({
@@ -283,9 +182,82 @@ const user = await userModel.upsert({
 });
 ```
 
+### Delete
+
+```typescript
+// Soft delete (if deletedAt is defined in schema)
+await userModel.delete({ email: 'alice@example.com' });
+
+// Hard delete (permanently remove row)
+await userModel.delete({ email: 'alice@example.com' }, { force: true });
 ```
 
-### Formula Support
+## Advanced Filtering
+
+TarangDB supports the following operators:
+
+- `gt`: Greater than
+- `lt`: Less than
+- `gte`: Greater than or equal
+- `lte`: Less than or equal
+- `ne`: Not equal
+
+```typescript
+// Users between 20 and 30
+const users = await userModel.findMany({
+  age: { gte: 20, lte: 30 }
+});
+```
+
+## Relationships
+
+Define relationships in the `Model` configuration.
+
+### Types
+
+- **hasOne**: One-to-one relationship.
+- **hasMany**: One-to-many relationship.
+- **belongsTo**: Inverse of hasOne or hasMany.
+
+### Example
+
+```typescript
+// ... Schema definitions for User and Post ...
+
+const userModel = new Model<User>(client, {
+  sheetName: 'Users',
+  schema: UserSchema,
+  relations: {
+    posts: {
+      type: 'hasMany',
+      targetModel: postModel,
+      foreignKey: 'userId',
+      localKey: 'id',
+    },
+  },
+});
+
+const postModel = new Model<Post>(client, {
+  sheetName: 'Posts',
+  schema: PostSchema,
+  relations: {
+    author: {
+      type: 'belongsTo',
+      targetModel: userModel,
+      foreignKey: 'userId',
+      localKey: 'id',
+    },
+  },
+});
+
+// Query with relations
+const userWithPosts = await userModel.findFirst(
+  { email: 'alice@example.com' }, 
+  { include: { posts: true } }
+);
+```
+
+## Formula Support
 
 You can pass Google Sheets formulas to any field. This is useful for calculated columns.
 
@@ -299,47 +271,6 @@ await productModel.create({
 });
 ```
 
-## API Reference
-
-### `DataTypes`
-Use `DataTypes` to define your schema.
-
-- `DataTypes.String`
-- `DataTypes.Number`
-- `DataTypes.Boolean`
-- `DataTypes.JSON`
-- `DataTypes.UUID`
-- `DataTypes.CUID`
-- `DataTypes.Date`
-
-**Methods:**
-- `DataTypes.Number.autoIncrement()`: Creates an auto-incrementing number column.
-- `DataTypes.Date.createdAt()`: Automatically sets the current date when creating a record.
-- `DataTypes.Date.updatedAt()`: Automatically updates the date when updating a record.
-- `DataTypes.Date.deletedAt()`: Enables soft delete. When `delete()` is called, this field is set instead of removing the record.
-
-### `Schema` Configuration
-| Property | Type | Description |
-|----------|------|-------------|
-| `type` | `DataType` | Data type of the column. |
-| `unique` | `boolean` | (Optional) Whether values must be unique. |
-| `default` | `any` | (Optional) Default value if not provided. |
-| `autoIncrement` | `boolean` | (Optional) Set to true for auto-incrementing numbers. |
-
-### `Model` Methods
-
-- **`findMany(filter?, options?)`**: Returns an array of records.
-  - `options`: `{ include?, select?, limit?, skip?, sortBy?, sortOrder?, includeDeleted? }`
-- **`findFirst(filter, options?)`**: Returns the first matching record or `null`.
-- **`create(data)`**: Creates a new record. Auto-generates `uuid` and `cuid`. Populates `createdAt`.
-- **`createMany(data[])`**: Creates multiple records in a single batch. Returns created records.
-- **`upsert(args)`**: Creates or updates a record. `args`: `{ where, update, create }`.
-- **`update(filter, data)`**: Updates matching records. Returns updated records. Updates `updatedAt`.
-- **`delete(filter, options?)`**: Deletes matching records. Returns count of deleted records.
-  - `options`: `{ force? }` - If true, performs hard delete. Otherwise, performs soft delete if `deletedAt` is configured.
-
 ## License
 
 MIT
-
-Turn your Google Sheets into a database with a simple, familiar API.
