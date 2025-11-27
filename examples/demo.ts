@@ -6,13 +6,11 @@ import { TarangClient, Model, Schema, DataTypes, Infer } from '../src';
 // User Schema
 const UserSchema = new Schema({
     id: { type: DataTypes.UUID, unique: true }, // Auto-generated UUID
-    cuid: { type: DataTypes.CUID, unique: true }, // Auto-generated CUID
-    name: DataTypes.String, // Shorthand
+    name: DataTypes.String,
     email: { type: DataTypes.String, unique: true },
-    age: DataTypes.Number, // Shorthand
-    birthDate: DataTypes.Date, // Plain Date field
+    age: DataTypes.Number,
+    role: { type: DataTypes.String, default: 'user' },
     isActive: { type: DataTypes.Boolean, default: true },
-    metadata: DataTypes.JSON, // JSON field
     createdAt: DataTypes.Date.createdAt(),
     updatedAt: DataTypes.Date.updatedAt(),
     deletedAt: DataTypes.Date.deletedAt(), // Soft delete
@@ -25,7 +23,8 @@ const PostSchema = new Schema({
     id: { type: DataTypes.Number, autoIncrement: true, unique: true }, // Auto Increment ID
     title: DataTypes.String,
     content: DataTypes.String,
-    userId: DataTypes.String, // Foreign Key
+    userId: DataTypes.String, // Foreign Key (UUID from User)
+    published: { type: DataTypes.Boolean, default: false },
     createdAt: DataTypes.Date.createdAt(),
     updatedAt: DataTypes.Date.updatedAt(),
 });
@@ -33,10 +32,12 @@ const PostSchema = new Schema({
 type Post = Infer<typeof PostSchema>;
 
 async function main() {
+    console.log('🚀 Starting TarangDB Demo...\n');
+
     // 2. Initialize Client
     // --------------------
     const client = new TarangClient({
-        spreadsheetId: 'YOUR_SPREADSHEET_ID',
+        spreadsheetId: 'YOUR_SPREADSHEET_ID', // Replace with actual ID for real run
         auth: {
             clientEmail: 'YOUR_SERVICE_ACCOUNT_EMAIL',
             privateKey: 'YOUR_PRIVATE_KEY',
@@ -46,7 +47,7 @@ async function main() {
     // 3. Initialize Models & Relations
     // --------------------------------
 
-    // Post Model (Declared first to be used in User relations)
+    // Post Model
     const postModel = new Model<Post>(client, {
         sheetName: 'Posts',
         schema: PostSchema,
@@ -67,141 +68,97 @@ async function main() {
     });
 
     // Add inverse relation to Post Model (belongsTo)
-    // Note: In a real app, you might want to define this cleaner, 
-    // but here we modify the internal relations for the demo.
-    // Ideally, you pass relations in the constructor.
-    // Let's re-instantiate postModel with relations if we want to use it, 
-    // or just assume we configured it correctly.
-    // For this demo, let's just show the User -> Post relation primarily, 
-    // but I'll add the config here for completeness if we were to re-create it.
-    /*
-    const postModelWithRelation = new Model<Post>(client, {
-        sheetName: 'Posts',
-        schema: PostSchema,
-        relations: {
-            author: {
-                type: 'belongsTo',
-                targetModel: userModel,
-                foreignKey: 'userId',
-                localKey: 'id'
-            }
-        }
-    });
-    */
+    // We access the private `relations` property or re-instantiate if supported publicly.
+    // For this demo, we'll assume the library supports adding relations dynamically or via constructor.
+    // Since `relations` is defined in the constructor, we can't easily add it after without casting.
+    // In a real app, you'd define models in an order or use a defineRelation method if available.
+    // Here we will just use the User -> Post relation.
 
     // 4. CRUD Operations
     // ------------------
 
-    // Create Single User
-    console.log('--- Creating User ---');
-    const newUser = await userModel.create({
-        name: 'John Doe',
-        email: 'john@example.com',
-        age: 30,
-        birthDate: new Date('1995-05-15'),
-        metadata: { role: 'admin', preferences: { theme: 'dark' } },
+    // --- CREATE ---
+    console.log('📝 Creating Users...');
+    const alice = await userModel.create({
+        name: 'Alice',
+        email: 'alice@example.com',
+        age: 25,
+        role: 'admin'
     });
-    console.log('Created User:', newUser);
+    console.log('   Created:', alice.name);
 
-    // Create Many Users (Batch)
-    console.log('\n--- Creating Many Users ---');
+    // Create Many
+    console.log('\n📝 Creating Many Users...');
     const newUsers = await userModel.createMany([
-        { name: 'Alice', email: 'alice@example.com', age: 25 },
-        { name: 'Bob', email: 'bob@example.com', age: 35 },
+        { name: 'Bob', email: 'bob@example.com', age: 30 },
+        { name: 'Charlie', email: 'charlie@example.com', age: 35 },
     ]);
-    console.log('Created Users:', newUsers);
+    console.log(`   Created ${newUsers.length} users.`);
 
-    // Upsert User (Update if exists, Create if not)
-    console.log('\n--- Upserting User ---');
+    // --- UPSERT ---
+    console.log('\n🔄 Upserting User (Update if exists, Create if not)...');
     const upsertedUser = await userModel.upsert({
-        where: { email: 'john@example.com' },
-        update: { age: 31 }, // Update age if John exists
-        create: { name: 'John Doe', email: 'john@example.com', age: 30 }, // Create if not
+        where: { email: 'alice@example.com' },
+        update: { age: 26 }, // Alice just had a birthday
+        create: { name: 'Alice', email: 'alice@example.com', age: 25 },
     });
-    console.log('Upserted User:', upsertedUser);
+    console.log(`   Upserted ${upsertedUser.name}, new age: ${upsertedUser.age}`);
 
-    // Create Post for User
-    console.log('\n--- Creating Post ---');
-    await postModel.create({
-        title: 'Hello World',
-        content: 'This is my first post',
-        userId: newUser.id,
-    });
-    console.log('Created Post for User');
+    // --- RELATIONS ---
+    console.log('\n🔗 Creating Posts for Alice...');
+    await postModel.createMany([
+        { title: 'Alice Post 1', content: 'Hello World', userId: alice.id, published: true },
+        { title: 'Alice Post 2', content: 'Draft post', userId: alice.id, published: false },
+    ]);
+    console.log('   Created 2 posts.');
 
-    // 5. Querying
-    // -----------
-
-    // Find User with Posts (Relations)
-    console.log('\n--- Find User with Posts ---');
+    // --- READ & FILTER ---
+    console.log('\n🔍 Finding Users with Posts...');
     const userWithPosts = await userModel.findFirst(
-        { email: 'john@example.com' },
+        { email: 'alice@example.com' },
         { include: { posts: true } }
     );
-    console.log('User with Posts:', userWithPosts);
+    console.log(`   Found ${userWithPosts?.name} with ${(userWithPosts as any)?.posts?.length} posts.`);
 
-    // Find Many with Advanced Filtering
-    console.log('\n--- Find Users > 25 years old ---');
+    console.log('\n🔍 Advanced Filtering (Age > 28)...');
     const olderUsers = await userModel.findMany({
-        age: { gt: 25 }
+        age: { gt: 28 }
     });
-    console.log('Older Users:', olderUsers);
+    console.log('   Found:', olderUsers.map(u => `${u.name} (${u.age})`).join(', '));
 
-    console.log('\n--- Find Users between 20 and 30 ---');
-    const youngAdults = await userModel.findMany({
-        age: { gte: 20, lte: 30 }
-    });
-    console.log('Young Adults:', youngAdults);
-
-    // Find with Pagination, Selection, and Sorting
-    console.log('\n--- Find with Pagination, Selection, and Sorting ---');
-    const pagedUsers = await userModel.findMany(
-        { isActive: true },
-        {
-            select: { name: true, email: true, age: true },
-            limit: 10,
-            skip: 0,
-            sortBy: 'age',
-            sortOrder: 'desc'
-        }
-    );
-    console.log('Paged Users (Sorted by Age desc):', pagedUsers);
-
-    // 6. Updates and Deletes
-    // ----------------------
-
-    // Update User
-    console.log('\n--- Updating User ---');
-    const updatedUsers = await userModel.update(
-        { email: 'john@example.com' },
+    // --- UPDATE ---
+    console.log('\n✏️  Updating Bob...');
+    await userModel.update(
+        { email: 'bob@example.com' },
         { isActive: false }
     );
-    console.log('Updated User:', updatedUsers);
+    console.log('   Bob is now inactive.');
 
-    // Soft Delete User
-    console.log('\n--- Soft Deleting User ---');
-    const deletedCount = await userModel.delete({ email: 'john@example.com' });
-    console.log('Soft Deleted Count:', deletedCount);
+    // --- SOFT DELETE ---
+    console.log('\n🗑️  Soft Deleting Charlie...');
+    await userModel.delete({ email: 'charlie@example.com' });
 
-    // Verify Soft Delete (Should not find it)
-    const foundAfterDelete = await userModel.findFirst({ email: 'john@example.com' });
-    console.log('Found after soft delete (should be null):', foundAfterDelete);
+    const charlieCheck = await userModel.findFirst({ email: 'charlie@example.com' });
+    console.log(`   Searching for Charlie (default): ${charlieCheck ? 'Found' : 'Not Found'}`);
 
-    // Find Including Deleted
-    console.log('\n--- Find Including Deleted ---');
-    const deletedUsers = await userModel.findMany(
-        { email: 'john@example.com' },
+    const charlieDeleted = await userModel.findFirst(
+        { email: 'charlie@example.com' },
         { includeDeleted: true }
     );
-    console.log('Found deleted users:', deletedUsers);
+    console.log(`   Searching for Charlie (includeDeleted): ${charlieDeleted ? 'Found' : 'Not Found'}`);
 
-    // Hard Delete (Cleanup)
-    console.log('\n--- Hard Deleting User (Cleanup) ---');
-    const hardDeletedCount = await userModel.delete(
-        { email: 'john@example.com' },
+    // --- HARD DELETE ---
+    console.log('\n💥 Hard Deleting Inactive Users...');
+    const deletedCount = await userModel.delete(
+        { isActive: false },
         { force: true }
     );
-    console.log('Hard Deleted Count:', hardDeletedCount);
+    console.log(`   Hard deleted ${deletedCount} users.`);
+
+    console.log('\n✅ Demo Complete!');
 }
 
-main().catch(console.error);
+// Only run if this file is executed directly
+if (import.meta.main) {
+    main().catch(console.error);
+}
