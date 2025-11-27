@@ -1,6 +1,6 @@
 {
   "name": "tarang-db",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "A Google Sheets ORM for Node.js and Bun",
   "keywords": [
     "google-sheets",

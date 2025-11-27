@@ -44,8 +44,17 @@ const client = new TarangClient({
     clientEmail: 'YOUR_SERVICE_ACCOUNT_EMAIL',
     privateKey: 'YOUR_PRIVATE_KEY', // from service account JSON
   },
+  cacheTTL: 60000, // Optional: Cache read results for 60 seconds (default)
 });
 ```
+
+### Optimization & Caching
+
+TarangDB includes a built-in in-memory cache to reduce Google Sheets API quota usage.
+
+- **Read Operations**: `findMany`, `findFirst`, and internal lookups are cached.
+- **Write Operations**: `create`, `update`, `delete` automatically invalidate the cache.
+- **Configuration**: Set `cacheTTL` in `TarangClient` config (milliseconds). Set to `0` to disable.
 
 ### 2. Define Schema & Model
 

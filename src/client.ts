@@ -7,6 +7,8 @@ export class TarangClient {
     private auth: JWT;
     private spreadsheetId: string;
     public sheets: any;
+    private cache: Map<string, { data: any, timestamp: number }> = new Map();
+    private cacheTTL: number;
 
     constructor(config: SheetConfig) {
         this.spreadsheetId = config.spreadsheetId;
@@ -17,6 +19,7 @@ export class TarangClient {
         });
 
         this.sheets = google.sheets({ version: 'v4', auth: this.auth });
+        this.cacheTTL = config.cacheTTL !== undefined ? config.cacheTTL : 60000;
     }
 
     async getSpreadsheetId() {
@@ -24,10 +27,22 @@ export class TarangClient {
     }
 
     async getSheetValues(range: string) {
+        if (this.cacheTTL > 0) {
+            const cached = this.cache.get(range);
+            if (cached && Date.now() - cached.timestamp < this.cacheTTL) {
+                return cached.data;
+            }
+        }
+
         const response = await this.sheets.spreadsheets.values.get({
             spreadsheetId: this.spreadsheetId,
             range,
         });
+
+        if (this.cacheTTL > 0) {
+            this.cache.set(range, { data: response.data.values, timestamp: Date.now() });
+        }
+
         return response.data.values;
     }
 
@@ -40,6 +55,7 @@ export class TarangClient {
                 values,
             },
         });
+        this.cache.clear(); // Invalidate cache on write
         return response.data;
     }
 
@@ -52,6 +68,7 @@ export class TarangClient {
                 values,
             },
         });
+        this.cache.clear(); // Invalidate cache on write
         return response.data;
     }
 
@@ -60,6 +77,7 @@ export class TarangClient {
             spreadsheetId: this.spreadsheetId,
             range,
         });
+        this.cache.clear(); // Invalidate cache on write
         return response.data;
     }
 }
