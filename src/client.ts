@@ -9,6 +9,7 @@ export class TarangClient {
     public sheets: any;
     private cache: Map<string, { data: any, timestamp: number }> = new Map();
     private cacheTTL: number;
+    private maxCacheSize: number;
 
     constructor(config: SheetConfig) {
         this.spreadsheetId = config.spreadsheetId;
@@ -19,7 +20,22 @@ export class TarangClient {
         });
 
         this.sheets = google.sheets({ version: 'v4', auth: this.auth });
+
         this.cacheTTL = config.cacheTTL !== undefined ? config.cacheTTL : 60000;
+        this.maxCacheSize = config.maxCacheSize !== undefined ? config.maxCacheSize : 100;
+    }
+
+    private invalidateCache(range: string) {
+        // Extract sheet name from range (e.g., 'Sheet1!A1:B2' -> 'Sheet1')
+        const sheetName = range.split('!')[0];
+        if (!sheetName) return;
+
+        // Delete all cache entries for this sheet
+        for (const key of this.cache.keys()) {
+            if (key.startsWith(sheetName + '!')) {
+                this.cache.delete(key);
+            }
+        }
     }
 
     async getSpreadsheetId() {
@@ -40,6 +56,11 @@ export class TarangClient {
         });
 
         if (this.cacheTTL > 0) {
+            // Enforce max cache size
+            if (this.cache.size >= this.maxCacheSize) {
+                const firstKey = this.cache.keys().next().value;
+                if (firstKey) this.cache.delete(firstKey);
+            }
             this.cache.set(range, { data: response.data.values, timestamp: Date.now() });
         }
 
@@ -55,7 +76,7 @@ export class TarangClient {
                 values,
             },
         });
-        this.cache.clear(); // Invalidate cache on write
+        this.invalidateCache(range); // Invalidate cache for this sheet
         return response.data;
     }
 
@@ -68,7 +89,7 @@ export class TarangClient {
                 values,
             },
         });
-        this.cache.clear(); // Invalidate cache on write
+        this.invalidateCache(range); // Invalidate cache for this sheet
         return response.data;
     }
 
@@ -77,7 +98,7 @@ export class TarangClient {
             spreadsheetId: this.spreadsheetId,
             range,
         });
-        this.cache.clear(); // Invalidate cache on write
+        this.invalidateCache(range); // Invalidate cache for this sheet
         return response.data;
     }
 }

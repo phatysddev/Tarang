@@ -10,6 +10,7 @@ export type SheetConfig = {
     spreadsheetId: string;
     auth: GoogleSheetsAuth;
     cacheTTL?: number; // Cache TTL in milliseconds, default 60000
+    maxCacheSize?: number; // Max number of entries in cache, default 100
 };
 
 export interface BaseColumnDefinition {

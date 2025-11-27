@@ -95,4 +95,53 @@ describe("Caching", () => {
         await client.getSheetValues('Sheet1!A1');
         expect(mockValuesGet).toHaveBeenCalledTimes(2);
     });
+    test("should only invalidate cache for the modified sheet", async () => {
+        // Cache data for Sheet1 and Sheet2
+        await client.getSheetValues('Sheet1!A1');
+        await client.getSheetValues('Sheet2!A1');
+        expect(mockValuesGet).toHaveBeenCalledTimes(2);
+
+        // Modify Sheet1
+        await client.appendValues('Sheet1!A1', [['new']]);
+
+        // Sheet1 should be invalidated (hit API)
+        await client.getSheetValues('Sheet1!A1');
+        expect(mockValuesGet).toHaveBeenCalledTimes(3);
+
+        // Sheet2 should still be cached (no API hit)
+        await client.getSheetValues('Sheet2!A1');
+        expect(mockValuesGet).toHaveBeenCalledTimes(3);
+    });
+
+    test("should enforce max cache size", async () => {
+        // Create client with small cache size
+        const smallCacheClient = new TarangClient({
+            spreadsheetId: 'test-sheet',
+            auth: { clientEmail: 'test', privateKey: 'test' },
+            cacheTTL: 60000,
+            maxCacheSize: 2
+        });
+        smallCacheClient.sheets = mockSheets;
+
+        // Fill cache
+        await smallCacheClient.getSheetValues('Sheet1!A1');
+        await smallCacheClient.getSheetValues('Sheet2!A1');
+        expect(mockValuesGet).toHaveBeenCalledTimes(2);
+
+        // Add one more to exceed limit (Sheet1 should be evicted)
+        await smallCacheClient.getSheetValues('Sheet3!A1');
+        expect(mockValuesGet).toHaveBeenCalledTimes(3);
+
+        // Sheet1 should be evicted (hit API)
+        await smallCacheClient.getSheetValues('Sheet1!A1');
+        expect(mockValuesGet).toHaveBeenCalledTimes(4);
+
+        // Sheet3 should still be cached (it was inserted recently)
+        await smallCacheClient.getSheetValues('Sheet3!A1');
+        expect(mockValuesGet).toHaveBeenCalledTimes(4);
+
+        // Sheet2 should have been evicted by Sheet1 insertion
+        await smallCacheClient.getSheetValues('Sheet2!A1');
+        expect(mockValuesGet).toHaveBeenCalledTimes(5);
+    });
 });
