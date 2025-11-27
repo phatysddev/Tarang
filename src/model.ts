@@ -12,6 +12,7 @@ export class Model<T = any> {
     private schema: Schema;
     private relations: Record<string, RelationConfig> = {};
     private headers: string[] = [];
+    private lastAutoIncrementValues: Record<string, number> = {};
 
     constructor(client: TarangClient, config: ModelConfig) {
         this.client = client;
@@ -333,6 +334,17 @@ export class Model<T = any> {
     private async prepareDataForCreate(data: AllowFormulas<Partial<T>>): Promise<any> {
         const dataWithDefaults: any = { ...data };
 
+        // Check for unique constraints
+        for (const key in dataWithDefaults) {
+            const columnDef = this.schema.definition[key];
+            if (columnDef && columnDef.unique) {
+                const existing = await this.findFirst({ [key]: dataWithDefaults[key] } as any);
+                if (existing) {
+                    throw new Error(`Unique constraint violation: ${key} with value '${dataWithDefaults[key]}' already exists.`);
+                }
+            }
+        }
+
         for (const key in this.schema.definition) {
             const columnDef = this.schema.definition[key];
             let type: string;
@@ -393,15 +405,24 @@ export class Model<T = any> {
 
     private async getNextAutoIncrementValue(key: string): Promise<number> {
         const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
-        if (!rows || rows.length === 0) return 1;
 
-        const items = rows.map((row: any[]) => this.mapRowToObject(row));
-        const max = items.reduce((maxVal: number, item: any) => {
-            const val = item[key];
-            return typeof val === 'number' && val > maxVal ? val : maxVal;
-        }, 0);
+        let max = 0;
+        if (rows && rows.length > 0) {
+            const items = rows.map((row: any[]) => this.mapRowToObject(row));
+            max = items.reduce((maxVal: number, item: any) => {
+                const val = item[key];
+                return typeof val === 'number' && val > maxVal ? val : maxVal;
+            }, 0);
+        }
 
-        return max + 1;
+        // Ensure we don't reuse a value if the sheet hasn't updated yet (API latency)
+        if (this.lastAutoIncrementValues[key] !== undefined) {
+            max = Math.max(max, this.lastAutoIncrementValues[key]);
+        }
+
+        const nextVal = max + 1;
+        this.lastAutoIncrementValues[key] = nextVal;
+        return nextVal;
     }
 
     private createLikeRegex(pattern: string): RegExp {
