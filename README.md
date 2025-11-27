@@ -283,6 +283,22 @@ const user = await userModel.upsert({
 });
 ```
 
+```
+
+### Formula Support
+
+You can pass Google Sheets formulas to any field. This is useful for calculated columns.
+
+```typescript
+await productModel.create({
+  name: 'iPhone',
+  price: 30000,
+  qty: 2,
+  // Formula to calculate total: price * qty
+  total: '=INDIRECT("R[0]C[-2]", FALSE) * INDIRECT("R[0]C[-1]", FALSE)' 
+});
+```
+
 ## API Reference
 
 ### `DataTypes`

@@ -1,5 +1,5 @@
 import { TarangClient } from './client';
-import { ModelConfig, RelationConfig, Filter, FilterOperator } from './types';
+import { ModelConfig, RelationConfig, Filter, FilterOperator, AllowFormulas } from './types';
 import { DataType, DateDataType } from './datatypes';
 import { parseValue, stringifyValue } from './utils';
 import { v4 as uuidv4 } from 'uuid';
@@ -168,7 +168,7 @@ export class Model<T = any> {
         return results.length > 0 ? results[0] : null;
     }
 
-    async create(data: Partial<T>): Promise<T> {
+    async create(data: AllowFormulas<Partial<T>>): Promise<T> {
         await this.ensureHeaders();
         const dataWithDefaults = await this.prepareDataForCreate(data);
         const row = this.mapObjectToRow(dataWithDefaults);
@@ -176,7 +176,7 @@ export class Model<T = any> {
         return dataWithDefaults as T;
     }
 
-    async createMany(data: Partial<T>[]): Promise<T[]> {
+    async createMany(data: AllowFormulas<Partial<T>>[]): Promise<T[]> {
         await this.ensureHeaders();
         const createdItems: T[] = [];
         const rows: any[][] = [];
@@ -194,7 +194,7 @@ export class Model<T = any> {
         return createdItems;
     }
 
-    async upsert(args: { where: Filter<T>, update: Partial<T>, create: Partial<T> }): Promise<T> {
+    async upsert(args: { where: Filter<T>, update: AllowFormulas<Partial<T>>, create: AllowFormulas<Partial<T>> }): Promise<T> {
         const existingItem = await this.findFirst(args.where);
         if (existingItem) {
             const updatedItems = await this.update(args.where, args.update);
@@ -204,7 +204,7 @@ export class Model<T = any> {
         }
     }
 
-    async update(filter: Filter<T>, data: Partial<T>): Promise<T[]> {
+    async update(filter: Filter<T>, data: AllowFormulas<Partial<T>>): Promise<T[]> {
         await this.ensureHeaders();
         const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
         if (!rows) return [];
@@ -300,7 +300,7 @@ export class Model<T = any> {
         return deletedCount;
     }
 
-    private async prepareDataForCreate(data: Partial<T>): Promise<any> {
+    private async prepareDataForCreate(data: AllowFormulas<Partial<T>>): Promise<any> {
         const dataWithDefaults: any = { ...data };
 
         for (const key in this.schema.definition) {

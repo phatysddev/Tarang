@@ -80,3 +80,7 @@ export type FilterOperator<T> = {
 export type Filter<T> = {
     [P in keyof T]?: T[P] | FilterOperator<T[P]>;
 };
+
+export type AllowFormulas<T> = {
+    [K in keyof T]: T[K] | string;
+};
