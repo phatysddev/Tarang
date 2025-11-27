@@ -25,13 +25,30 @@ export class Model<T = any> {
     private async ensureHeaders() {
         if (this.headers.length > 0) return;
 
-        const values = await this.client.getSheetValues(`${this.sheetName}!A1:Z1`);
-        if (values && values.length > 0) {
-            this.headers = values[0];
-        } else {
-            // Create headers if they don't exist based on schema
-            this.headers = Object.keys(this.schema.definition);
-            await this.client.updateValues(`${this.sheetName}!A1`, [this.headers]);
+        try {
+            const values = await this.client.getSheetValues(`${this.sheetName}!A1:Z1`);
+            if (values && values.length > 0) {
+                this.headers = values[0];
+            } else {
+                // Sheet exists but empty, create headers
+                this.headers = Object.keys(this.schema.definition);
+                await this.client.updateValues(`${this.sheetName}!A1`, [this.headers]);
+            }
+        } catch (error: any) {
+            // Check for "Unable to parse range" which often means sheet doesn't exist
+            // Also check nested error object from Gaxios
+            const msg = error.message || error.response?.data?.error?.message || '';
+
+            if (error.code === 400 && (msg.includes('Unable to parse range') || msg.includes('Invalid values'))) {
+                // Try to create the sheet
+                await this.client.createSheet(this.sheetName);
+
+                // Then create headers
+                this.headers = Object.keys(this.schema.definition);
+                await this.client.updateValues(`${this.sheetName}!A1`, [this.headers]);
+            } else {
+                throw error;
+            }
         }
     }
 

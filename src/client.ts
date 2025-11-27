@@ -101,4 +101,29 @@ export class TarangClient {
         this.invalidateCache(range); // Invalidate cache for this sheet
         return response.data;
     }
+
+    async createSheet(title: string) {
+        try {
+            await this.sheets.spreadsheets.batchUpdate({
+                spreadsheetId: this.spreadsheetId,
+                requestBody: {
+                    requests: [
+                        {
+                            addSheet: {
+                                properties: {
+                                    title,
+                                },
+                            },
+                        },
+                    ],
+                },
+            });
+        } catch (error: any) {
+            // Ignore if sheet already exists
+            if (error.code === 400 && (error.message.includes('already exists') || error.response?.data?.error?.message?.includes('already exists'))) {
+                return;
+            }
+            throw error;
+        }
+    }
 }
