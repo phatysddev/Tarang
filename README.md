@@ -201,11 +201,23 @@ TarangDB supports the following operators:
 - `gte`: Greater than or equal
 - `lte`: Less than or equal
 - `ne`: Not equal
+- `like`: String matching (case-sensitive, supports `%` and `_`)
+- `ilike`: String matching (case-insensitive, supports `%` and `_`)
 
 ```typescript
 // Users between 20 and 30
 const users = await userModel.findMany({
   age: { gte: 20, lte: 30 }
+});
+
+// Users starting with 'A'
+const aUsers = await userModel.findMany({
+  name: { like: 'A%' }
+});
+
+// Users containing 'john' (case-insensitive)
+const johns = await userModel.findMany({
+  name: { ilike: '%john%' }
 });
 ```
 

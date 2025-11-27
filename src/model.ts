@@ -374,6 +374,12 @@ export class Model<T = any> {
         return max + 1;
     }
 
+    private createLikeRegex(pattern: string): RegExp {
+        const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regexString = '^' + escapedPattern.replace(/%/g, '.*').replace(/_/g, '.') + '$';
+        return new RegExp(regexString);
+    }
+
     private matchesFilter(item: T, filter: Filter<T>): boolean {
         for (const key in filter) {
             const filterValue = filter[key];
@@ -387,6 +393,16 @@ export class Model<T = any> {
                 if (ops.gte !== undefined && !(itemValue >= ops.gte)) return false;
                 if (ops.lte !== undefined && !(itemValue <= ops.lte)) return false;
                 if (ops.ne !== undefined && itemValue === ops.ne) return false;
+                if (ops.like !== undefined) {
+                    if (typeof itemValue !== 'string') return false;
+                    const regex = this.createLikeRegex(ops.like);
+                    if (!regex.test(itemValue)) return false;
+                }
+                if (ops.ilike !== undefined) {
+                    if (typeof itemValue !== 'string') return false;
+                    const regex = this.createLikeRegex(ops.ilike);
+                    if (!new RegExp(regex.source, 'i').test(itemValue)) return false;
+                }
             } else {
                 // Exact match
                 if (itemValue !== filterValue) {

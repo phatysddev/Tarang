@@ -75,6 +75,8 @@ export type FilterOperator<T> = {
     gte?: T;
     lte?: T;
     ne?: T;
+    like?: string;
+    ilike?: string;
 };
 
 export type Filter<T> = {
