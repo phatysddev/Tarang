@@ -1,5 +1,5 @@
 import { TarangClient } from './client';
-import { ModelConfig, RelationConfig, Filter, FilterOperator, AllowFormulas } from './types';
+import { ModelConfig, RelationConfig, Filter, FilterOperator, AllowFormulas, FindOptions } from './types';
 import { DataType, DateDataType } from './datatypes';
 import { parseValue, stringifyValue } from './utils';
 import { v4 as uuidv4 } from 'uuid';
@@ -12,6 +12,7 @@ export class Model<T = any> {
     private readonly schema: Schema;
     private readonly relations: Record<string, RelationConfig> = {};
     private headers: string[] = [];
+    private lastAutoIncrementValues: Record<string, number> = {};
 
     constructor(client: TarangClient, config: ModelConfig) {
         this.client = client;
@@ -25,13 +26,30 @@ export class Model<T = any> {
     private async ensureHeaders() {
         if (this.headers.length > 0) return;
 
-        const values = await this.client.getSheetValues(`${this.sheetName}!A1:Z1`);
-        if (values && values.length > 0) {
-            this.headers = values[0];
-        } else {
-            // Create headers if they don't exist based on schema
-            this.headers = Object.keys(this.schema.definition);
-            await this.client.updateValues(`${this.sheetName}!A1`, [this.headers]);
+        try {
+            const values = await this.client.getSheetValues(`${this.sheetName}!A1:Z1`);
+            if (values && values.length > 0) {
+                this.headers = values[0];
+            } else {
+                // Sheet exists but empty, create headers
+                this.headers = Object.keys(this.schema.definition);
+                await this.client.updateValues(`${this.sheetName}!A1`, [this.headers]);
+            }
+        } catch (error: any) {
+            // Check for "Unable to parse range" which often means sheet doesn't exist
+            // Also check nested error object from Gaxios
+            const msg = error.message || error.response?.data?.error?.message || '';
+
+            if (error.code === 400 && (msg.includes('Unable to parse range') || msg.includes('Invalid values'))) {
+                // Try to create the sheet
+                await this.client.createSheet(this.sheetName);
+
+                // Then create headers
+                this.headers = Object.keys(this.schema.definition);
+                await this.client.updateValues(`${this.sheetName}!A1`, [this.headers]);
+            } else {
+                throw error;
+            }
         }
     }
 
@@ -57,7 +75,7 @@ export class Model<T = any> {
         });
     }
 
-    async findMany(filter?: Filter<T>, options?: { include?: Record<string, boolean>, select?: Record<string, boolean>, limit?: number, skip?: number, includeDeleted?: boolean, sortBy?: keyof T, sortOrder?: 'asc' | 'desc' }): Promise<Partial<T>[]> {
+    async findMany(filter?: Filter<T>, options?: FindOptions<T>): Promise<Partial<T>[]> {
         await this.ensureHeaders();
         const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
         if (!rows) return [];
@@ -122,7 +140,7 @@ export class Model<T = any> {
         });
     }
 
-    private async loadRelations(results: any[], include: Record<string, boolean>) {
+    private async loadRelations(results: any[], include: Record<string, boolean | FindOptions<any>>) {
         const relationsToFetch = Object.keys(include).filter(
             key => include[key] && this.relations[key]
         );
@@ -130,9 +148,22 @@ export class Model<T = any> {
         await Promise.all(relationsToFetch.map(async (relationName) => {
             const relation = this.relations[relationName];
             const targetModel = relation.targetModel as Model<any>;
+            const includeValue = include[relationName];
+
+            // Determine options for the related model query
+            let relatedOptions: FindOptions<any> = {};
+            if (typeof includeValue === 'object') {
+                relatedOptions = { ...(includeValue as FindOptions<any>) };
+            }
+
+            // Ensure foreign key is selected if select is present, otherwise we can't match relations
+            if (relatedOptions.select) {
+                relatedOptions.select[relation.foreignKey] = true;
+            }
 
             // Fetch all related records once to avoid N+1 problem
-            const allRelatedRecords = await targetModel.findMany();
+            // We pass the nested options here!
+            const allRelatedRecords = await targetModel.findMany(undefined, relatedOptions);
 
             results.forEach((item: any) => {
                 const localValue = item[relation.localKey];
@@ -163,7 +194,7 @@ export class Model<T = any> {
         });
     }
 
-    async findFirst(filter: Filter<T>, options?: { include?: Record<string, boolean>, select?: Record<string, boolean>, skip?: number, includeDeleted?: boolean }): Promise<Partial<T> | null> {
+    async findFirst(filter: Filter<T>, options?: FindOptions<T>): Promise<Partial<T> | null> {
         const results = await this.findMany(filter, { ...options, limit: 1 });
         return results.length > 0 ? results[0] : null;
     }
@@ -303,6 +334,17 @@ export class Model<T = any> {
     private async prepareDataForCreate(data: AllowFormulas<Partial<T>>): Promise<any> {
         const dataWithDefaults: any = { ...data };
 
+        // Check for unique constraints
+        for (const key in dataWithDefaults) {
+            const columnDef = this.schema.definition[key];
+            if (columnDef && columnDef.unique) {
+                const existing = await this.findFirst({ [key]: dataWithDefaults[key] } as any);
+                if (existing) {
+                    throw new Error(`Unique constraint violation: ${key} with value '${dataWithDefaults[key]}' already exists.`);
+                }
+            }
+        }
+
         for (const key in this.schema.definition) {
             const columnDef = this.schema.definition[key];
             let type: string;
@@ -362,15 +404,24 @@ export class Model<T = any> {
 
     private async getNextAutoIncrementValue(key: string): Promise<number> {
         const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
-        if (!rows || rows.length === 0) return 1;
 
-        const items = rows.map((row: any[]) => this.mapRowToObject(row));
-        const max = items.reduce((maxVal: number, item: any) => {
-            const val = item[key];
-            return typeof val === 'number' && val > maxVal ? val : maxVal;
-        }, 0);
+        let max = 0;
+        if (rows && rows.length > 0) {
+            const items = rows.map((row: any[]) => this.mapRowToObject(row));
+            max = items.reduce((maxVal: number, item: any) => {
+                const val = item[key];
+                return typeof val === 'number' && val > maxVal ? val : maxVal;
+            }, 0);
+        }
 
-        return max + 1;
+        // Ensure we don't reuse a value if the sheet hasn't updated yet (API latency)
+        if (this.lastAutoIncrementValues[key] !== undefined) {
+            max = Math.max(max, this.lastAutoIncrementValues[key]);
+        }
+
+        const nextVal = max + 1;
+        this.lastAutoIncrementValues[key] = nextVal;
+        return nextVal;
     }
 
     private createLikeRegex(pattern: string): RegExp {

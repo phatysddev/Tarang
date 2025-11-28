@@ -1,36 +1,100 @@
 import { TarangClient, Model, Schema, DataTypes, Infer } from '../src';
 
-// Example Schema
-const UserSchema = new Schema({
-    id: { type: DataTypes.UUID, unique: true },
+// --- Schema ---
+
+const ProductSchema = new Schema({
+    id: { type: DataTypes.Number, autoIncrement: true },
     name: DataTypes.String,
-    age: DataTypes.Number,
-    isActive: { type: DataTypes.Boolean, default: true },
+    category: DataTypes.String,
+    price: DataTypes.Number,
+    stock: DataTypes.Number,
+    tags: DataTypes.String, // Comma separated tags
+    isAvailable: DataTypes.Boolean,
 });
 
-type User = Infer<typeof UserSchema>;
+type Product = Infer<typeof ProductSchema>;
 
 async function main() {
-    // Mock client for testing logic without actual API calls if possible, 
-    // but here we will use the actual client structure. 
-    // Since we don't have real credentials, we might need to rely on unit tests or mock the client.
-    // However, the user asked to fix/implement, so I assume they have a way to run it or I should create a test that mocks the client.
+    console.log('🛒 Starting Filter Demo...\n');
 
-    // Let's create a mock client to test the logic in isolation
-    const mockClient = {
-        getSheetValues: async () => [],
-        updateValues: async () => { },
-        appendValues: async () => { },
-        clearValues: async () => { },
-    } as unknown as TarangClient;
+    const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID;
+    const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+    const privateKey = process.env.GOOGLE_PRIVATE_KEY;
 
-    // We can't easily mock the client inside the Model without changing the Model constructor or using a library.
-    // But wait, I can just test the `matchesFilter` logic if I expose it or if I use a local test.
-    // Actually, I'll create a test file in `tests/` that imports Model and tests it.
-    // But for now, let's create a demo script that *would* run if credentials were present, 
-    // OR better, let's create a unit test that mocks the client.
+    if (!spreadsheetId || !clientEmail || !privateKey) {
+        console.error('❌ Error: Missing environment variables.');
+        console.error('Please set GOOGLE_SPREADSHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, and GOOGLE_PRIVATE_KEY.');
+        process.exit(1);
+    }
 
-    console.log("This is a placeholder for verification. Since I don't have real credentials, I will create a unit test instead.");
+    const client = new TarangClient({
+        spreadsheetId,
+        auth: {
+            clientEmail,
+            privateKey,
+        },
+    });
+
+    const productModel = new Model<Product>(client, {
+        sheetName: 'Products',
+        schema: ProductSchema,
+    });
+
+    // Seed Data
+    console.log('🌱 Seeding Products...');
+    await productModel.createMany([
+        { name: 'Laptop Pro', category: 'Electronics', price: 1200, stock: 50, tags: 'work,premium', isAvailable: true },
+        { name: 'Smartphone X', category: 'Electronics', price: 800, stock: 0, tags: 'mobile,popular', isAvailable: false },
+        { name: 'Coffee Maker', category: 'Home', price: 150, stock: 20, tags: 'kitchen,appliance', isAvailable: true },
+        { name: 'Desk Chair', category: 'Furniture', price: 300, stock: 10, tags: 'office,comfort', isAvailable: true },
+        { name: 'Gaming Mouse', category: 'Electronics', price: 50, stock: 100, tags: 'gaming,accessory', isAvailable: true },
+    ]);
+
+    // 1. Exact Match
+    console.log('\n🔍 1. Exact Match (Category = Electronics)');
+    const electronics = await productModel.findMany({ category: 'Electronics' });
+    console.log(`   Found: ${electronics.map(p => p.name).join(', ')}`);
+
+    // 2. Greater Than / Less Than
+    console.log('\n🔍 2. Price Range (Price > 100 AND Price < 1000)');
+    const midRange = await productModel.findMany({
+        price: { gt: 100, lt: 1000 }
+    });
+    console.log(`   Found: ${midRange.map(p => `${p.name} ($${p.price})`).join(', ')}`);
+
+    // 3. Not Equal
+    console.log('\n🔍 3. Not Electronics (Category != Electronics)');
+    const notElectronics = await productModel.findMany({
+        category: { ne: 'Electronics' }
+    });
+    console.log(`   Found: ${notElectronics.map(p => p.name).join(', ')}`);
+
+    // 4. LIKE (Case Sensitive)
+    console.log('\n🔍 4. LIKE (Name starts with "Smart")');
+    const smartProducts = await productModel.findMany({
+        name: { like: 'Smart%' }
+    });
+    console.log(`   Found: ${smartProducts.map(p => p.name).join(', ')}`);
+
+    // 5. ILIKE (Case Insensitive)
+    console.log('\n🔍 5. ILIKE (Name contains "mouse")');
+    const mouseProducts = await productModel.findMany({
+        name: { ilike: '%mouse%' }
+    });
+    console.log(`   Found: ${mouseProducts.map(p => p.name).join(', ')}`);
+
+    // 6. Complex Filter
+    console.log('\n🔍 6. Available Electronics under $1000');
+    const cheapElectronics = await productModel.findMany({
+        category: 'Electronics',
+        isAvailable: true,
+        price: { lt: 1000 }
+    });
+    console.log(`   Found: ${cheapElectronics.map(p => `${p.name} ($${p.price})`).join(', ')}`);
+
+    console.log('\n✅ Filter Demo Complete!');
 }
 
-// main().catch(console.error);
+if (import.meta.main) {
+    main().catch(console.error);
+}
