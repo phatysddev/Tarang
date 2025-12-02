@@ -246,18 +246,33 @@ export class Model<T extends RowData = RowData> {
         const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
         if (!rows) return [];
 
-        const updatedItems: T[] = [];
         const updatedAtField = this.getUpdatedAtField();
+        const deletedAtField = this.getDeletedAtField();
         const updateData: Record<string, unknown> = { ...data };
 
         if (updatedAtField) {
             updateData[updatedAtField] = new Date().toISOString();
         }
 
+        // Find items that will be updated (excluding soft-deleted)
+        const itemsToUpdate: T[] = [];
+        for (const row of rows) {
+            const item = this.mapRowToObject(row);
+            if (deletedAtField && item[deletedAtField as keyof T]) continue;
+            if (this.matchesFilter(item, filter)) {
+                itemsToUpdate.push(item);
+            }
+        }
+
+        if (itemsToUpdate.length === 0) return [];
+
+        // Validate unique constraints, excluding items being updated
+        await this.validateUniqueConstraints(updateData, itemsToUpdate);
+
+        const updatedItems: T[] = [];
         let hasChanges = false;
         const newRows = rows.map((row: CellValue[]) => {
             const item = this.mapRowToObject(row);
-            const deletedAtField = this.getDeletedAtField();
 
             // Skip soft-deleted items from update
             if (deletedAtField && item[deletedAtField as keyof T]) {
@@ -346,15 +361,26 @@ export class Model<T extends RowData = RowData> {
         return dataWithDefaults as Partial<T>;
     }
 
-    private async validateUniqueConstraints(data: Record<string, unknown>): Promise<void> {
+    private async validateUniqueConstraints(
+        data: Record<string, unknown>,
+        excludeItems?: T[]
+    ): Promise<void> {
         for (const key in data) {
             const columnDef = this.schema.definition[key];
             if (!columnDef?.unique) continue;
 
             const existing = await this.findFirst({ [key]: data[key] } as Filter<T>);
-            if (existing) {
-                throw new Error(`Unique constraint violation: ${key} with value '${data[key]}' already exists.`);
+            if (!existing) continue;
+
+            // If excludeItems provided, check if the existing record is one of them
+            if (excludeItems) {
+                const isExcluded = excludeItems.some(item =>
+                    item[key as keyof T] === existing[key as keyof T]
+                );
+                if (isExcluded) continue;
             }
+
+            throw new Error(`Unique constraint violation: ${key} with value '${data[key]}' already exists.`);
         }
     }
 
