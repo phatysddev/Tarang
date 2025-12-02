@@ -1,6 +1,6 @@
 import { TarangClient } from './client';
 import { ModelConfig, RelationConfig, Filter, FilterOperator, AllowFormulas, FindOptions, CellValue, RowData, ModelLike } from './types';
-import { DataType, DateDataType } from './datatypes';
+import { DataType, DateDataType, ColumnDefinition } from './datatypes';
 import { parseValue, stringifyValue } from './utils';
 import { v4 as uuidv4 } from 'uuid';
 import { createId } from '@paralleldrive/cuid2';
@@ -340,52 +340,82 @@ export class Model<T extends RowData = RowData> {
     private async prepareDataForCreate(data: AllowFormulas<Partial<T>>): Promise<Partial<T>> {
         const dataWithDefaults: Record<string, unknown> = { ...data };
 
-        // Check for unique constraints
-        for (const key in dataWithDefaults) {
-            const columnDef = this.schema.definition[key];
-            if (columnDef?.unique) {
-                const existing = await this.findFirst({ [key]: dataWithDefaults[key] } as Filter<T>);
-                if (existing) {
-                    throw new Error(`Unique constraint violation: ${key} with value '${dataWithDefaults[key]}' already exists.`);
-                }
-            }
-        }
+        await this.validateUniqueConstraints(dataWithDefaults);
+        await this.applyColumnDefaults(dataWithDefaults);
 
-        for (const key in this.schema.definition) {
-            const columnDef = this.schema.definition[key];
-            let type: string;
-            let isAutoIncrement = false;
-            let isCreatedAt = false;
-            let isUpdatedAt = false;
-
-            if (columnDef.type instanceof DataType) {
-                type = columnDef.type.type;
-                isAutoIncrement = columnDef.type.isAutoIncrement || !!columnDef.autoIncrement;
-                if (columnDef.type instanceof DateDataType) {
-                    isCreatedAt = columnDef.type.isCreatedAt;
-                    isUpdatedAt = columnDef.type.isUpdatedAt;
-                }
-            } else {
-                type = 'string';
-            }
-
-            if (dataWithDefaults[key] === undefined) {
-                if (columnDef.default !== undefined) {
-                    dataWithDefaults[key] = columnDef.default;
-                } else if (isAutoIncrement && type === 'number') {
-                    dataWithDefaults[key] = await this.getNextAutoIncrementValue(key);
-                } else if (type === 'uuid') {
-                    dataWithDefaults[key] = uuidv4();
-                } else if (type === 'cuid') {
-                    dataWithDefaults[key] = createId();
-                } else if (type === 'date') {
-                    if (isCreatedAt || isUpdatedAt) {
-                        dataWithDefaults[key] = new Date().toISOString();
-                    }
-                }
-            }
-        }
         return dataWithDefaults as Partial<T>;
+    }
+
+    private async validateUniqueConstraints(data: Record<string, unknown>): Promise<void> {
+        for (const key in data) {
+            const columnDef = this.schema.definition[key];
+            if (!columnDef?.unique) continue;
+
+            const existing = await this.findFirst({ [key]: data[key] } as Filter<T>);
+            if (existing) {
+                throw new Error(`Unique constraint violation: ${key} with value '${data[key]}' already exists.`);
+            }
+        }
+    }
+
+    private async applyColumnDefaults(data: Record<string, unknown>): Promise<void> {
+        for (const key in this.schema.definition) {
+            if (data[key] !== undefined) continue;
+
+            const columnDef = this.schema.definition[key];
+            const defaultValue = await this.getDefaultValue(key, columnDef);
+            if (defaultValue !== undefined) {
+                data[key] = defaultValue;
+            }
+        }
+    }
+
+    private async getDefaultValue(key: string, columnDef: ColumnDefinition): Promise<unknown> {
+        if (columnDef.default !== undefined) {
+            return columnDef.default;
+        }
+
+        const typeInfo = this.extractTypeInfo(columnDef);
+
+        if (typeInfo.isAutoIncrement && typeInfo.type === 'number') {
+            return this.getNextAutoIncrementValue(key);
+        }
+        if (typeInfo.type === 'uuid') {
+            return uuidv4();
+        }
+        if (typeInfo.type === 'cuid') {
+            return createId();
+        }
+        if (typeInfo.type === 'date' && (typeInfo.isCreatedAt || typeInfo.isUpdatedAt)) {
+            return new Date().toISOString();
+        }
+
+        return undefined;
+    }
+
+    private extractTypeInfo(columnDef: ColumnDefinition): {
+        type: string;
+        isAutoIncrement: boolean;
+        isCreatedAt: boolean;
+        isUpdatedAt: boolean;
+    } {
+        if (!(columnDef.type instanceof DataType)) {
+            return { type: 'string', isAutoIncrement: false, isCreatedAt: false, isUpdatedAt: false };
+        }
+
+        const type = columnDef.type.type;
+        const isAutoIncrement = columnDef.type.isAutoIncrement || !!columnDef.autoIncrement;
+
+        if (columnDef.type instanceof DateDataType) {
+            return {
+                type,
+                isAutoIncrement,
+                isCreatedAt: columnDef.type.isCreatedAt,
+                isUpdatedAt: columnDef.type.isUpdatedAt,
+            };
+        }
+
+        return { type, isAutoIncrement, isCreatedAt: false, isUpdatedAt: false };
     }
 
     private getDeletedAtField(): string | null {
@@ -441,35 +471,56 @@ export class Model<T extends RowData = RowData> {
             const filterValue = filter[key];
             const itemValue = item[key as keyof T];
 
-            if (typeof filterValue === 'object' && filterValue !== null && !Array.isArray(filterValue) && !(filterValue instanceof Date)) {
-                // Handle comparison operators
-                const ops = filterValue as FilterOperator<T[keyof T]>;
-
-                // Skip comparison if itemValue is null/undefined
-                if (itemValue == null) {
-                    if (ops.ne !== undefined) continue; // null !== value is true
-                    return false; // Other comparisons fail for null
-                }
-
-                if (ops.gt !== undefined && ops.gt != null && itemValue <= ops.gt) return false;
-                if (ops.lt !== undefined && ops.lt != null && itemValue >= ops.lt) return false;
-                if (ops.gte !== undefined && ops.gte != null && itemValue < ops.gte) return false;
-                if (ops.lte !== undefined && ops.lte != null && itemValue > ops.lte) return false;
-                if (ops.ne !== undefined && itemValue === ops.ne) return false;
-                if (ops.like !== undefined) {
-                    if (typeof itemValue !== 'string') return false;
-                    const regex = this.createLikeRegex(ops.like);
-                    if (!regex.test(itemValue)) return false;
-                }
-                if (ops.ilike !== undefined) {
-                    if (typeof itemValue !== 'string') return false;
-                    const regex = this.createLikeRegex(ops.ilike);
-                    if (!new RegExp(regex.source, 'i').test(itemValue)) return false;
-                }
-            } else if (itemValue !== filterValue) {
-                // Exact match
+            if (!this.matchesFilterValue(itemValue, filterValue)) {
                 return false;
             }
+        }
+        return true;
+    }
+
+    private isFilterOperator(value: unknown): boolean {
+        return typeof value === 'object' && value !== null && !Array.isArray(value) && !(value instanceof Date);
+    }
+
+    private matchesFilterValue(itemValue: T[keyof T], filterValue: unknown): boolean {
+        if (!this.isFilterOperator(filterValue)) {
+            return itemValue === filterValue;
+        }
+
+        const ops = filterValue as FilterOperator<T[keyof T]>;
+        return this.matchesOperators(itemValue, ops);
+    }
+
+    private matchesOperators(itemValue: T[keyof T], ops: FilterOperator<T[keyof T]>): boolean {
+        // Handle null/undefined item values
+        if (itemValue == null) {
+            return ops.ne !== undefined; // null !== value is true, other comparisons fail
+        }
+
+        if (!this.matchesComparisonOperators(itemValue, ops)) return false;
+        if (!this.matchesStringOperators(itemValue, ops)) return false;
+
+        return true;
+    }
+
+    private matchesComparisonOperators(itemValue: NonNullable<T[keyof T]>, ops: FilterOperator<T[keyof T]>): boolean {
+        if (ops.gt != null && itemValue <= ops.gt) return false;
+        if (ops.lt != null && itemValue >= ops.lt) return false;
+        if (ops.gte != null && itemValue < ops.gte) return false;
+        if (ops.lte != null && itemValue > ops.lte) return false;
+        if (ops.ne !== undefined && itemValue === ops.ne) return false;
+        return true;
+    }
+
+    private matchesStringOperators(itemValue: NonNullable<T[keyof T]>, ops: FilterOperator<T[keyof T]>): boolean {
+        if (ops.like !== undefined) {
+            if (typeof itemValue !== 'string') return false;
+            if (!this.createLikeRegex(ops.like).test(itemValue)) return false;
+        }
+        if (ops.ilike !== undefined) {
+            if (typeof itemValue !== 'string') return false;
+            const regex = this.createLikeRegex(ops.ilike);
+            if (!new RegExp(regex.source, 'i').test(itemValue)) return false;
         }
         return true;
     }
