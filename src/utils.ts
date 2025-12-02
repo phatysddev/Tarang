@@ -1,10 +1,10 @@
-import type { CellValue, JsonValue } from './types';
+import type { JsonValue } from './types';
 
 export function formatPrivateKey(key: string): string {
     return key.replaceAll(String.raw`\n`, '\n');
 }
 
-export type ParsedValue = string | number | boolean | Date | JsonValue | null;
+export type ParsedValue = Date | JsonValue;
 
 export function parseValue(value: string | null | undefined, type: string): ParsedValue {
     if (value === undefined || value === null || value === '') return null;
@@ -26,9 +26,10 @@ export function parseValue(value: string | null | undefined, type: string): Pars
     }
 }
 
-export function stringifyValue(value: unknown): CellValue {
+export function stringifyValue(value: unknown): string {
     if (value === null || value === undefined) return '';
     if (value instanceof Date) return value.toISOString();
     if (typeof value === 'object') return JSON.stringify(value);
-    return String(value);
+    // Primitives: string, number, boolean, bigint, symbol
+    return String(value as string | number | boolean | bigint | symbol);
 }

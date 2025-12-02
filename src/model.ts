@@ -110,7 +110,7 @@ export class Model<T extends RowData = RowData> {
         }
 
         if (options?.select) {
-            results = this.applySelect(results, options.select);
+            return this.applySelect(results, options.select);
         }
 
         return results;
@@ -134,6 +134,11 @@ export class Model<T extends RowData = RowData> {
         return results.sort((a, b) => {
             const valA = a[sortBy];
             const valB = b[sortBy];
+
+            // Handle null/undefined values - nulls sort last
+            if (valA == null && valB == null) return 0;
+            if (valA == null) return sortOrder === 'asc' ? 1 : -1;
+            if (valB == null) return sortOrder === 'asc' ? -1 : 1;
 
             if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
             if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
@@ -167,17 +172,16 @@ export class Model<T extends RowData = RowData> {
             const allRelatedRecords = await targetModel.findMany(undefined, relatedOptions);
 
             results.forEach((item) => {
-                const extendedItem = item as T & Record<string, unknown>;
-                const localValue = extendedItem[relation.localKey as keyof T];
+                const localValue = item[relation.localKey as keyof T];
                 if (!localValue) return;
 
                 if (relation.type === 'hasOne' || relation.type === 'belongsTo') {
-                    extendedItem[relationName] = allRelatedRecords.find(
-                        (r) => r[relation.foreignKey as keyof typeof r] === localValue
+                    (item as Record<string, unknown>)[relationName] = allRelatedRecords.find(
+                        (r) => r[relation.foreignKey] === localValue
                     ) || null;
                 } else if (relation.type === 'hasMany') {
-                    extendedItem[relationName] = allRelatedRecords.filter(
-                        (r) => r[relation.foreignKey as keyof typeof r] === localValue
+                    (item as Record<string, unknown>)[relationName] = allRelatedRecords.filter(
+                        (r) => r[relation.foreignKey] === localValue
                     );
                 }
             });
@@ -339,7 +343,7 @@ export class Model<T extends RowData = RowData> {
         // Check for unique constraints
         for (const key in dataWithDefaults) {
             const columnDef = this.schema.definition[key];
-            if (columnDef && columnDef.unique) {
+            if (columnDef?.unique) {
                 const existing = await this.findFirst({ [key]: dataWithDefaults[key] } as Filter<T>);
                 if (existing) {
                     throw new Error(`Unique constraint violation: ${key} with value '${dataWithDefaults[key]}' already exists.`);
@@ -440,10 +444,17 @@ export class Model<T extends RowData = RowData> {
             if (typeof filterValue === 'object' && filterValue !== null && !Array.isArray(filterValue) && !(filterValue instanceof Date)) {
                 // Handle comparison operators
                 const ops = filterValue as FilterOperator<T[keyof T]>;
-                if (ops.gt !== undefined && itemValue <= ops.gt) return false;
-                if (ops.lt !== undefined && itemValue >= ops.lt) return false;
-                if (ops.gte !== undefined && itemValue < ops.gte) return false;
-                if (ops.lte !== undefined && itemValue > ops.lte) return false;
+
+                // Skip comparison if itemValue is null/undefined
+                if (itemValue == null) {
+                    if (ops.ne !== undefined) continue; // null !== value is true
+                    return false; // Other comparisons fail for null
+                }
+
+                if (ops.gt !== undefined && ops.gt != null && itemValue <= ops.gt) return false;
+                if (ops.lt !== undefined && ops.lt != null && itemValue >= ops.lt) return false;
+                if (ops.gte !== undefined && ops.gte != null && itemValue < ops.gte) return false;
+                if (ops.lte !== undefined && ops.lte != null && itemValue > ops.lte) return false;
                 if (ops.ne !== undefined && itemValue === ops.ne) return false;
                 if (ops.like !== undefined) {
                     if (typeof itemValue !== 'string') return false;
