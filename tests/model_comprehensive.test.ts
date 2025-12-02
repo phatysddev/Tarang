@@ -123,4 +123,44 @@ describe("Model Comprehensive", () => {
             expect(keptRows.length).toBe(3); // 3 remaining
         });
     });
+
+    describe("update with unique constraint", () => {
+        test("should allow updating a record with its own unique value", async () => {
+            // Alice updating her own email to the same value should work
+            const updated = await userModel.update(
+                { name: 'Alice' },
+                { email: 'alice@example.com' }
+            );
+            expect(updated.length).toBe(1);
+            expect(updated[0].email).toBe('alice@example.com');
+        });
+
+        test("should throw error when updating to another record's unique value", async () => {
+            // Alice trying to use Bob's email should fail
+            await expect(
+                userModel.update(
+                    { name: 'Alice' },
+                    { email: 'bob@example.com' }
+                )
+            ).rejects.toThrow('Unique constraint violation');
+        });
+
+        test("should allow updating non-unique fields without conflict", async () => {
+            const updated = await userModel.update(
+                { name: 'Alice' },
+                { age: 26 }
+            );
+            expect(updated.length).toBe(1);
+            expect(updated[0].age).toBe(26);
+        });
+
+        test("should allow updating to a new unique value", async () => {
+            const updated = await userModel.update(
+                { name: 'Alice' },
+                { email: 'alice.new@example.com' }
+            );
+            expect(updated.length).toBe(1);
+            expect(updated[0].email).toBe('alice.new@example.com');
+        });
+    });
 });

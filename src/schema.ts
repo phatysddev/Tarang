@@ -1,5 +1,4 @@
-import { SchemaDefinition, ColumnDefinition } from './datatypes';
-import { DataType, NumberDataType, DateDataType } from './datatypes';
+import { SchemaDefinition, ColumnDefinition , DataType, NumberDataType, DateDataType } from './datatypes';
 
 export class Schema<T extends SchemaDefinition = SchemaDefinition> {
     public definition: Record<string, ColumnDefinition>;

@@ -38,6 +38,7 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "test": "bun test",
+    "typecheck": "tsc --noEmit",
     "prepublishOnly": "bun run build"
   },
   "dependencies": {

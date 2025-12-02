@@ -1,12 +1,12 @@
 import { TarangClient } from './client';
-import { ModelConfig, RelationConfig, Filter, FilterOperator, AllowFormulas, FindOptions } from './types';
-import { DataType, DateDataType } from './datatypes';
+import { ModelConfig, RelationConfig, Filter, FilterOperator, AllowFormulas, FindOptions, CellValue, RowData, ModelLike } from './types';
+import { DataType, DateDataType, ColumnDefinition } from './datatypes';
 import { parseValue, stringifyValue } from './utils';
 import { v4 as uuidv4 } from 'uuid';
 import { createId } from '@paralleldrive/cuid2';
 import { Schema } from './schema';
 
-export class Model<T = any> {
+export class Model<T extends RowData = RowData> {
     private readonly client: TarangClient;
     private readonly sheetName: string;
     private readonly schema: Schema;
@@ -35,12 +35,13 @@ export class Model<T = any> {
                 this.headers = Object.keys(this.schema.definition);
                 await this.client.updateValues(`${this.sheetName}!A1`, [this.headers]);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             // Check for "Unable to parse range" which often means sheet doesn't exist
             // Also check nested error object from Gaxios
-            const msg = error.message || error.response?.data?.error?.message || '';
+            const err = error as { code?: number; message?: string; response?: { data?: { error?: { message?: string } } } };
+            const msg = err.message || err.response?.data?.error?.message || '';
 
-            if (error.code === 400 && (msg.includes('Unable to parse range') || msg.includes('Invalid values'))) {
+            if (err.code === 400 && (msg.includes('Unable to parse range') || msg.includes('Invalid values'))) {
                 // Try to create the sheet
                 await this.client.createSheet(this.sheetName);
 
@@ -53,14 +54,14 @@ export class Model<T = any> {
         }
     }
 
-    private mapRowToObject(row: any[]): T {
-        const obj: any = {};
+    private mapRowToObject(row: CellValue[]): T {
+        const obj: Record<string, unknown> = {};
         this.headers.forEach((header, index) => {
             const value = row[index];
             const columnDef = this.schema.definition[header];
             if (columnDef) {
                 const type = columnDef.type instanceof DataType ? columnDef.type.type : 'string';
-                obj[header] = parseValue(value, type as any);
+                obj[header] = parseValue(value as string, type);
             } else {
                 obj[header] = value;
             }
@@ -68,9 +69,9 @@ export class Model<T = any> {
         return obj as T;
     }
 
-    private mapObjectToRow(obj: any): any[] {
+    private mapObjectToRow(obj: Partial<T>): CellValue[] {
         return this.headers.map(header => {
-            const value = obj[header];
+            const value = obj[header as keyof T];
             return stringifyValue(value);
         });
     }
@@ -80,13 +81,13 @@ export class Model<T = any> {
         const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
         if (!rows) return [];
 
-        let results = rows.map((row: any[]) => this.mapRowToObject(row));
+        let results = rows.map((row: CellValue[]) => this.mapRowToObject(row));
 
         // Filter out soft-deleted items unless explicitly requested
         if (!options?.includeDeleted) {
             const deletedAtField = this.getDeletedAtField();
             if (deletedAtField) {
-                results = results.filter((item: any) => !item[deletedAtField]);
+                results = results.filter((item) => !item[deletedAtField as keyof T]);
             }
         }
 
@@ -109,7 +110,7 @@ export class Model<T = any> {
         }
 
         if (options?.select) {
-            results = this.applySelect(results, options.select);
+            return this.applySelect(results, options.select);
         }
 
         return results;
@@ -134,26 +135,31 @@ export class Model<T = any> {
             const valA = a[sortBy];
             const valB = b[sortBy];
 
+            // Handle null/undefined values - nulls sort last
+            if (valA == null && valB == null) return 0;
+            if (valA == null) return sortOrder === 'asc' ? 1 : -1;
+            if (valB == null) return sortOrder === 'asc' ? -1 : 1;
+
             if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
             if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
             return 0;
         });
     }
 
-    private async loadRelations(results: any[], include: Record<string, boolean | FindOptions<any>>) {
+    private async loadRelations(results: T[], include: Record<string, boolean | FindOptions<unknown>>) {
         const relationsToFetch = Object.keys(include).filter(
             key => include[key] && this.relations[key]
         );
 
         await Promise.all(relationsToFetch.map(async (relationName) => {
             const relation = this.relations[relationName];
-            const targetModel = relation.targetModel as Model<any>;
+            const targetModel = relation.targetModel as ModelLike<RowData>;
             const includeValue = include[relationName];
 
             // Determine options for the related model query
-            let relatedOptions: FindOptions<any> = {};
+            let relatedOptions: FindOptions<RowData> = {};
             if (typeof includeValue === 'object') {
-                relatedOptions = { ...(includeValue as FindOptions<any>) };
+                relatedOptions = { ...(includeValue as FindOptions<RowData>) };
             }
 
             // Ensure foreign key is selected if select is present, otherwise we can't match relations
@@ -165,29 +171,29 @@ export class Model<T = any> {
             // We pass the nested options here!
             const allRelatedRecords = await targetModel.findMany(undefined, relatedOptions);
 
-            results.forEach((item: any) => {
-                const localValue = item[relation.localKey];
+            results.forEach((item) => {
+                const localValue = item[relation.localKey as keyof T];
                 if (!localValue) return;
 
                 if (relation.type === 'hasOne' || relation.type === 'belongsTo') {
-                    item[relationName] = allRelatedRecords.find(
-                        (r: any) => r[relation.foreignKey] === localValue
+                    (item as Record<string, unknown>)[relationName] = allRelatedRecords.find(
+                        (r) => r[relation.foreignKey] === localValue
                     ) || null;
                 } else if (relation.type === 'hasMany') {
-                    item[relationName] = allRelatedRecords.filter(
-                        (r: any) => r[relation.foreignKey] === localValue
+                    (item as Record<string, unknown>)[relationName] = allRelatedRecords.filter(
+                        (r) => r[relation.foreignKey] === localValue
                     );
                 }
             });
         }));
     }
 
-    private applySelect(results: any[], select: Record<string, boolean>): any[] {
-        return results.map((item: any) => {
-            const selectedItem: any = {};
+    private applySelect(results: T[], select: Record<string, boolean>): Partial<T>[] {
+        return results.map((item) => {
+            const selectedItem: Partial<T> = {};
             for (const key in select) {
                 if (select[key]) {
-                    selectedItem[key] = item[key];
+                    selectedItem[key as keyof T] = item[key as keyof T];
                 }
             }
             return selectedItem;
@@ -210,7 +216,7 @@ export class Model<T = any> {
     async createMany(data: AllowFormulas<Partial<T>>[]): Promise<T[]> {
         await this.ensureHeaders();
         const createdItems: T[] = [];
-        const rows: any[][] = [];
+        const rows: CellValue[][] = [];
 
         for (const item of data) {
             const dataWithDefaults = await this.prepareDataForCreate(item);
@@ -240,26 +246,41 @@ export class Model<T = any> {
         const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
         if (!rows) return [];
 
-        const updatedItems: T[] = [];
         const updatedAtField = this.getUpdatedAtField();
-        const updateData: any = { ...data };
+        const deletedAtField = this.getDeletedAtField();
+        const updateData: Record<string, unknown> = { ...data };
 
         if (updatedAtField) {
             updateData[updatedAtField] = new Date().toISOString();
         }
 
-        let hasChanges = false;
-        const newRows = rows.map((row: any[]) => {
+        // Find items that will be updated (excluding soft-deleted)
+        const itemsToUpdate: T[] = [];
+        for (const row of rows) {
             const item = this.mapRowToObject(row);
-            const deletedAtField = this.getDeletedAtField();
+            if (deletedAtField && item[deletedAtField as keyof T]) continue;
+            if (this.matchesFilter(item, filter)) {
+                itemsToUpdate.push(item);
+            }
+        }
+
+        if (itemsToUpdate.length === 0) return [];
+
+        // Validate unique constraints, excluding items being updated
+        await this.validateUniqueConstraints(updateData, itemsToUpdate);
+
+        const updatedItems: T[] = [];
+        let hasChanges = false;
+        const newRows = rows.map((row: CellValue[]) => {
+            const item = this.mapRowToObject(row);
 
             // Skip soft-deleted items from update
-            if (deletedAtField && (item as any)[deletedAtField]) {
+            if (deletedAtField && item[deletedAtField as keyof T]) {
                 return row;
             }
 
             if (this.matchesFilter(item, filter)) {
-                const updatedItem = { ...item, ...updateData };
+                const updatedItem = { ...item, ...updateData } as T;
                 updatedItems.push(updatedItem);
                 hasChanges = true;
                 return this.mapObjectToRow(updatedItem);
@@ -286,18 +307,18 @@ export class Model<T = any> {
         if (deletedAtField && !options?.force) {
             let deletedCount = 0;
             let hasChanges = false;
-            const newRows = rows.map((row: any[]) => {
+            const newRows = rows.map((row: CellValue[]) => {
                 const item = this.mapRowToObject(row);
 
                 if (this.matchesFilter(item, filter)) {
                     // Skip if already deleted
-                    if ((item as any)[deletedAtField]) return row;
+                    if (item[deletedAtField as keyof T]) return row;
 
-                    const updatedItem: any = { ...item };
+                    const updatedItem: Record<string, unknown> = { ...item };
                     updatedItem[deletedAtField] = new Date().toISOString();
                     deletedCount++;
                     hasChanges = true;
-                    return this.mapObjectToRow(updatedItem);
+                    return this.mapObjectToRow(updatedItem as Partial<T>);
                 }
                 return row;
             });
@@ -309,10 +330,10 @@ export class Model<T = any> {
         }
 
         // Hard delete implementation
-        const keptRows: any[][] = [];
+        const keptRows: CellValue[][] = [];
         let deletedCount = 0;
 
-        rows.forEach((row: any[]) => {
+        rows.forEach((row: CellValue[]) => {
             const item = this.mapRowToObject(row);
             if (this.matchesFilter(item, filter)) {
                 deletedCount++;
@@ -331,55 +352,96 @@ export class Model<T = any> {
         return deletedCount;
     }
 
-    private async prepareDataForCreate(data: AllowFormulas<Partial<T>>): Promise<any> {
-        const dataWithDefaults: any = { ...data };
+    private async prepareDataForCreate(data: AllowFormulas<Partial<T>>): Promise<Partial<T>> {
+        const dataWithDefaults: Record<string, unknown> = { ...data };
 
-        // Check for unique constraints
-        for (const key in dataWithDefaults) {
+        await this.validateUniqueConstraints(dataWithDefaults);
+        await this.applyColumnDefaults(dataWithDefaults);
+
+        return dataWithDefaults as Partial<T>;
+    }
+
+    private async validateUniqueConstraints(
+        data: Record<string, unknown>,
+        excludeItems?: T[]
+    ): Promise<void> {
+        for (const key in data) {
             const columnDef = this.schema.definition[key];
-            if (columnDef && columnDef.unique) {
-                const existing = await this.findFirst({ [key]: dataWithDefaults[key] } as any);
-                if (existing) {
-                    throw new Error(`Unique constraint violation: ${key} with value '${dataWithDefaults[key]}' already exists.`);
-                }
-            }
-        }
+            if (!columnDef?.unique) continue;
 
+            const existing = await this.findFirst({ [key]: data[key] } as Filter<T>);
+            if (!existing) continue;
+
+            // If excludeItems provided, check if the existing record is one of them
+            if (excludeItems) {
+                const isExcluded = excludeItems.some(item =>
+                    item[key as keyof T] === existing[key as keyof T]
+                );
+                if (isExcluded) continue;
+            }
+
+            throw new Error(`Unique constraint violation: ${key} with value '${data[key]}' already exists.`);
+        }
+    }
+
+    private async applyColumnDefaults(data: Record<string, unknown>): Promise<void> {
         for (const key in this.schema.definition) {
+            if (data[key] !== undefined) continue;
+
             const columnDef = this.schema.definition[key];
-            let type: string;
-            let isAutoIncrement = false;
-            let isCreatedAt = false;
-            let isUpdatedAt = false;
-
-            if (columnDef.type instanceof DataType) {
-                type = columnDef.type.type;
-                isAutoIncrement = columnDef.type.isAutoIncrement || !!columnDef.autoIncrement;
-                if (columnDef.type instanceof DateDataType) {
-                    isCreatedAt = columnDef.type.isCreatedAt;
-                    isUpdatedAt = columnDef.type.isUpdatedAt;
-                }
-            } else {
-                type = 'string';
-            }
-
-            if (dataWithDefaults[key] === undefined) {
-                if (columnDef.default !== undefined) {
-                    dataWithDefaults[key] = columnDef.default;
-                } else if (isAutoIncrement && type === 'number') {
-                    dataWithDefaults[key] = await this.getNextAutoIncrementValue(key);
-                } else if (type === 'uuid') {
-                    dataWithDefaults[key] = uuidv4();
-                } else if (type === 'cuid') {
-                    dataWithDefaults[key] = createId();
-                } else if (type === 'date') {
-                    if (isCreatedAt || isUpdatedAt) {
-                        dataWithDefaults[key] = new Date().toISOString();
-                    }
-                }
+            const defaultValue = await this.getDefaultValue(key, columnDef);
+            if (defaultValue !== undefined) {
+                data[key] = defaultValue;
             }
         }
-        return dataWithDefaults;
+    }
+
+    private async getDefaultValue(key: string, columnDef: ColumnDefinition): Promise<unknown> {
+        if (columnDef.default !== undefined) {
+            return columnDef.default;
+        }
+
+        const typeInfo = this.extractTypeInfo(columnDef);
+
+        if (typeInfo.isAutoIncrement && typeInfo.type === 'number') {
+            return this.getNextAutoIncrementValue(key);
+        }
+        if (typeInfo.type === 'uuid') {
+            return uuidv4();
+        }
+        if (typeInfo.type === 'cuid') {
+            return createId();
+        }
+        if (typeInfo.type === 'date' && (typeInfo.isCreatedAt || typeInfo.isUpdatedAt)) {
+            return new Date().toISOString();
+        }
+
+        return undefined;
+    }
+
+    private extractTypeInfo(columnDef: ColumnDefinition): {
+        type: string;
+        isAutoIncrement: boolean;
+        isCreatedAt: boolean;
+        isUpdatedAt: boolean;
+    } {
+        if (!(columnDef.type instanceof DataType)) {
+            return { type: 'string', isAutoIncrement: false, isCreatedAt: false, isUpdatedAt: false };
+        }
+
+        const type = columnDef.type.type;
+        const isAutoIncrement = columnDef.type.isAutoIncrement || !!columnDef.autoIncrement;
+
+        if (columnDef.type instanceof DateDataType) {
+            return {
+                type,
+                isAutoIncrement,
+                isCreatedAt: columnDef.type.isCreatedAt,
+                isUpdatedAt: columnDef.type.isUpdatedAt,
+            };
+        }
+
+        return { type, isAutoIncrement, isCreatedAt: false, isUpdatedAt: false };
     }
 
     private getDeletedAtField(): string | null {
@@ -407,9 +469,9 @@ export class Model<T = any> {
 
         let max = 0;
         if (rows && rows.length > 0) {
-            const items = rows.map((row: any[]) => this.mapRowToObject(row));
-            max = items.reduce((maxVal: number, item: any) => {
-                const val = item[key];
+            const items = rows.map((row: CellValue[]) => this.mapRowToObject(row));
+            max = items.reduce((maxVal: number, item: T) => {
+                const val = item[key as keyof T];
                 return typeof val === 'number' && val > maxVal ? val : maxVal;
             }, 0);
         }
@@ -435,28 +497,56 @@ export class Model<T = any> {
             const filterValue = filter[key];
             const itemValue = item[key as keyof T];
 
-            if (typeof filterValue === 'object' && filterValue !== null && !Array.isArray(filterValue) && !(filterValue instanceof Date)) {
-                // Handle comparison operators
-                const ops = filterValue as FilterOperator<any>;
-                if (ops.gt !== undefined && itemValue <= ops.gt) return false;
-                if (ops.lt !== undefined && itemValue >= ops.lt) return false;
-                if (ops.gte !== undefined && itemValue < ops.gte) return false;
-                if (ops.lte !== undefined && itemValue > ops.lte) return false;
-                if (ops.ne !== undefined && itemValue === ops.ne) return false;
-                if (ops.like !== undefined) {
-                    if (typeof itemValue !== 'string') return false;
-                    const regex = this.createLikeRegex(ops.like);
-                    if (!regex.test(itemValue)) return false;
-                }
-                if (ops.ilike !== undefined) {
-                    if (typeof itemValue !== 'string') return false;
-                    const regex = this.createLikeRegex(ops.ilike);
-                    if (!new RegExp(regex.source, 'i').test(itemValue)) return false;
-                }
-            } else if (itemValue !== filterValue) {
-                // Exact match
+            if (!this.matchesFilterValue(itemValue, filterValue)) {
                 return false;
             }
+        }
+        return true;
+    }
+
+    private isFilterOperator(value: unknown): boolean {
+        return typeof value === 'object' && value !== null && !Array.isArray(value) && !(value instanceof Date);
+    }
+
+    private matchesFilterValue(itemValue: T[keyof T], filterValue: unknown): boolean {
+        if (!this.isFilterOperator(filterValue)) {
+            return itemValue === filterValue;
+        }
+
+        const ops = filterValue as FilterOperator<T[keyof T]>;
+        return this.matchesOperators(itemValue, ops);
+    }
+
+    private matchesOperators(itemValue: T[keyof T], ops: FilterOperator<T[keyof T]>): boolean {
+        // Handle null/undefined item values
+        if (itemValue == null) {
+            return ops.ne !== undefined; // null !== value is true, other comparisons fail
+        }
+
+        if (!this.matchesComparisonOperators(itemValue, ops)) return false;
+        if (!this.matchesStringOperators(itemValue, ops)) return false;
+
+        return true;
+    }
+
+    private matchesComparisonOperators(itemValue: NonNullable<T[keyof T]>, ops: FilterOperator<T[keyof T]>): boolean {
+        if (ops.gt != null && itemValue <= ops.gt) return false;
+        if (ops.lt != null && itemValue >= ops.lt) return false;
+        if (ops.gte != null && itemValue < ops.gte) return false;
+        if (ops.lte != null && itemValue > ops.lte) return false;
+        if (ops.ne !== undefined && itemValue === ops.ne) return false;
+        return true;
+    }
+
+    private matchesStringOperators(itemValue: NonNullable<T[keyof T]>, ops: FilterOperator<T[keyof T]>): boolean {
+        if (ops.like !== undefined) {
+            if (typeof itemValue !== 'string') return false;
+            if (!this.createLikeRegex(ops.like).test(itemValue)) return false;
+        }
+        if (ops.ilike !== undefined) {
+            if (typeof itemValue !== 'string') return false;
+            const regex = this.createLikeRegex(ops.ilike);
+            if (!new RegExp(regex.source, 'i').test(itemValue)) return false;
         }
         return true;
     }

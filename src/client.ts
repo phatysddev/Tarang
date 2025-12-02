@@ -1,13 +1,13 @@
-import { google } from 'googleapis';
+import { google, sheets_v4 } from 'googleapis';
 import { JWT } from 'google-auth-library';
-import { SheetConfig } from './types';
+import { SheetConfig, CellValue } from './types';
 import { formatPrivateKey } from './utils';
 
 export class TarangClient {
     private readonly auth: JWT;
     private readonly spreadsheetId: string;
-    public sheets: any;
-    private readonly cache: Map<string, { data: any, timestamp: number }> = new Map();
+    public sheets: sheets_v4.Sheets;
+    private readonly cache: Map<string, { data: CellValue[][] | null | undefined, timestamp: number }> = new Map();
     private readonly cacheTTL: number;
     private readonly maxCacheSize: number;
 
@@ -67,7 +67,7 @@ export class TarangClient {
         return response.data.values;
     }
 
-    async appendValues(range: string, values: any[][]) {
+    async appendValues(range: string, values: CellValue[][]) {
         const response = await this.sheets.spreadsheets.values.append({
             spreadsheetId: this.spreadsheetId,
             range,
@@ -80,7 +80,7 @@ export class TarangClient {
         return response.data;
     }
 
-    async updateValues(range: string, values: any[][]) {
+    async updateValues(range: string, values: CellValue[][]) {
         const response = await this.sheets.spreadsheets.values.update({
             spreadsheetId: this.spreadsheetId,
             range,
@@ -118,9 +118,10 @@ export class TarangClient {
                     ],
                 },
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
             // Ignore if sheet already exists
-            if (error.code === 400 && (error.message.includes('already exists') || error.response?.data?.error?.message?.includes('already exists'))) {
+            const err = error as { code?: number; message?: string; response?: { data?: { error?: { message?: string } } } };
+            if (err.code === 400 && (err.message?.includes('already exists') || err.response?.data?.error?.message?.includes('already exists'))) {
                 return;
             }
             throw error;

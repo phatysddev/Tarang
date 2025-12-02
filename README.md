@@ -36,13 +36,13 @@ bun add tarang-db
 ### 1. Initialize Client
 
 ```typescript
-import { TarangClient } from 'tarang-db';
+import { TarangClient } from "tarang-db";
 
 const client = new TarangClient({
-  spreadsheetId: 'YOUR_SPREADSHEET_ID',
+  spreadsheetId: "YOUR_SPREADSHEET_ID",
   auth: {
-    clientEmail: 'YOUR_SERVICE_ACCOUNT_EMAIL',
-    privateKey: 'YOUR_PRIVATE_KEY', // from service account JSON
+    clientEmail: "YOUR_SERVICE_ACCOUNT_EMAIL",
+    privateKey: "YOUR_PRIVATE_KEY", // from service account JSON
   },
   cacheTTL: 60000, // Optional: Cache read results for 60 seconds (default)
   maxCacheSize: 100, // Optional: Max number of entries in cache (default 100)
@@ -62,7 +62,7 @@ TarangDB includes a built-in in-memory cache to reduce Google Sheets API quota u
 ### 2. Define Schema & Model
 
 ```typescript
-import { Model, Schema, DataTypes, Infer } from 'tarang-db';
+import { Model, Schema, DataTypes, Infer } from "tarang-db";
 
 // Define Schema
 const UserSchema = new Schema({
@@ -83,7 +83,7 @@ type User = Infer<typeof UserSchema>;
 
 // Initialize Model
 const userModel = new Model<User>(client, {
-  sheetName: 'Users', // Name of the tab in Google Sheets
+  sheetName: "Users", // Name of the tab in Google Sheets
   schema: UserSchema,
 });
 ```
@@ -94,26 +94,26 @@ TarangDB uses a schema definition object where keys are column names and values 
 
 ### Data Types
 
-| Type | Description |
-|------|-------------|
-| `DataTypes.String` | Text string |
-| `DataTypes.Number` | Numeric value |
-| `DataTypes.Boolean` | Boolean value (true/false) |
-| `DataTypes.Date` | Date object (stored as ISO string) |
-| `DataTypes.JSON` | JSON object (stored as stringified JSON) |
-| `DataTypes.UUID` | UUID v4 string |
-| `DataTypes.CUID` | CUID string |
+| Type                | Description                              |
+| ------------------- | ---------------------------------------- |
+| `DataTypes.String`  | Text string                              |
+| `DataTypes.Number`  | Numeric value                            |
+| `DataTypes.Boolean` | Boolean value (true/false)               |
+| `DataTypes.Date`    | Date object (stored as ISO string)       |
+| `DataTypes.JSON`    | JSON object (stored as stringified JSON) |
+| `DataTypes.UUID`    | UUID v4 string                           |
+| `DataTypes.CUID`    | CUID string                              |
 
 ### Modifiers
 
-| Modifier | Description |
-|----------|-------------|
-| `unique` | Ensures values in the column are unique. |
-| `default` | Sets a default value if none is provided. |
-| `autoIncrement` | (Number only) Auto-increments the value. |
-| `createdAt()` | (Date only) Sets current date on creation. |
-| `updatedAt()` | (Date only) Updates date on modification. |
-| `deletedAt()` | (Date only) Used for soft deletes. |
+| Modifier        | Description                                |
+| --------------- | ------------------------------------------ |
+| `unique`        | Ensures values in the column are unique.   |
+| `default`       | Sets a default value if none is provided.  |
+| `autoIncrement` | (Number only) Auto-increments the value.   |
+| `createdAt()`   | (Date only) Sets current date on creation. |
+| `updatedAt()`   | (Date only) Updates date on modification.  |
+| `deletedAt()`   | (Date only) Used for soft deletes.         |
 
 ## CRUD Operations
 
@@ -121,8 +121,8 @@ TarangDB uses a schema definition object where keys are column names and values 
 
 ```typescript
 const user = await userModel.create({
-  name: 'Alice',
-  email: 'alice@example.com',
+  name: "Alice",
+  email: "alice@example.com",
   age: 25,
 });
 ```
@@ -133,8 +133,8 @@ Batch create multiple records.
 
 ```typescript
 const users = await userModel.createMany([
-  { name: 'Bob', email: 'bob@example.com' },
-  { name: 'Charlie', email: 'charlie@example.com' },
+  { name: "Bob", email: "bob@example.com" },
+  { name: "Charlie", email: "charlie@example.com" },
 ]);
 ```
 
@@ -150,12 +150,12 @@ const adults = await userModel.findMany({ age: { gte: 18 } });
 // Pagination & Sorting
 const pagedUsers = await userModel.findMany(
   { isActive: true },
-  { 
-    limit: 10, 
-    skip: 0, 
-    sortBy: 'createdAt', 
-    sortOrder: 'desc' 
-  }
+  {
+    limit: 10,
+    skip: 0,
+    sortBy: "createdAt",
+    sortOrder: "desc",
+  },
 );
 
 // Select specific fields
@@ -165,7 +165,7 @@ const namesOnly = await userModel.findMany({}, { select: { name: true } });
 ### Read (Find First)
 
 ```typescript
-const user = await userModel.findFirst({ email: 'alice@example.com' });
+const user = await userModel.findFirst({ email: "alice@example.com" });
 ```
 
 ### Update
@@ -173,8 +173,8 @@ const user = await userModel.findFirst({ email: 'alice@example.com' });
 ```typescript
 // Update by filter
 const updated = await userModel.update(
-  { email: 'alice@example.com' },
-  { age: 26 }
+  { email: "alice@example.com" },
+  { age: 26 },
 );
 ```
 
@@ -184,12 +184,12 @@ Create if not exists, otherwise update.
 
 ```typescript
 const user = await userModel.upsert({
-  where: { email: 'alice@example.com' },
+  where: { email: "alice@example.com" },
   update: { age: 26 },
-  create: { 
-    name: 'Alice', 
-    email: 'alice@example.com', 
-    age: 26 
+  create: {
+    name: "Alice",
+    email: "alice@example.com",
+    age: 26,
   },
 });
 ```
@@ -198,10 +198,10 @@ const user = await userModel.upsert({
 
 ```typescript
 // Soft delete (if deletedAt is defined in schema)
-await userModel.delete({ email: 'alice@example.com' });
+await userModel.delete({ email: "alice@example.com" });
 
 // Hard delete (permanently remove row)
-await userModel.delete({ email: 'alice@example.com' }, { force: true });
+await userModel.delete({ email: "alice@example.com" }, { force: true });
 ```
 
 ## Advanced Filtering
@@ -219,17 +219,17 @@ TarangDB supports the following operators:
 ```typescript
 // Users between 20 and 30
 const users = await userModel.findMany({
-  age: { gte: 20, lte: 30 }
+  age: { gte: 20, lte: 30 },
 });
 
 // Users starting with 'A'
 const aUsers = await userModel.findMany({
-  name: { like: 'A%' }
+  name: { like: "A%" },
 });
 
 // Users containing 'john' (case-insensitive)
 const johns = await userModel.findMany({
-  name: { ilike: '%john%' }
+  name: { ilike: "%john%" },
 });
 ```
 
@@ -249,43 +249,43 @@ Define relationships in the `Model` configuration.
 // ... Schema definitions for User and Post ...
 
 const userModel = new Model<User>(client, {
-  sheetName: 'Users',
+  sheetName: "Users",
   schema: UserSchema,
   relations: {
     posts: {
-      type: 'hasMany',
+      type: "hasMany",
       targetModel: postModel,
-      foreignKey: 'userId',
-      localKey: 'id',
+      foreignKey: "userId",
+      localKey: "id",
     },
   },
 });
 
 const postModel = new Model<Post>(client, {
-  sheetName: 'Posts',
+  sheetName: "Posts",
   schema: PostSchema,
   relations: {
     author: {
-      type: 'belongsTo',
+      type: "belongsTo",
       targetModel: userModel,
-      foreignKey: 'userId',
-      localKey: 'id',
+      foreignKey: "userId",
+      localKey: "id",
     },
   },
 });
 
 // Query with relations
 const userWithPosts = await userModel.findFirst(
-  { email: 'alice@example.com' }, 
-  { 
-    include: { 
+  { email: "alice@example.com" },
+  {
+    include: {
       posts: true,
       // Nested include with select
       profile: {
-        select: { bio: true }
-      }
-    } 
-  }
+        select: { bio: true },
+      },
+    },
+  },
 );
 ```
 
@@ -297,8 +297,8 @@ Batch create multiple records efficiently.
 
 ```typescript
 const users = await userModel.createMany([
-  { name: 'Bob', email: 'bob@example.com' },
-  { name: 'Charlie', email: 'charlie@example.com' },
+  { name: "Bob", email: "bob@example.com" },
+  { name: "Charlie", email: "charlie@example.com" },
 ]);
 ```
 
@@ -308,12 +308,12 @@ Create a record if it doesn't exist, or update it if it does.
 
 ```typescript
 const user = await userModel.upsert({
-  where: { email: 'alice@example.com' },
+  where: { email: "alice@example.com" },
   update: { age: 27 },
-  create: { 
-    name: 'Alice', 
-    email: 'alice@example.com', 
-    age: 26 
+  create: {
+    name: "Alice",
+    email: "alice@example.com",
+    age: 26,
   },
 });
 ```
@@ -324,15 +324,15 @@ If your schema includes a `deletedAt` field using `DataTypes.Date.deletedAt()`, 
 
 ```typescript
 // Soft delete (sets deletedAt timestamp)
-await userModel.delete({ email: 'alice@example.com' });
+await userModel.delete({ email: "alice@example.com" });
 
 // Hard delete (permanently removes the row)
-await userModel.delete({ email: 'alice@example.com' }, { force: true });
+await userModel.delete({ email: "alice@example.com" }, { force: true });
 
 // Include soft-deleted records in queries
 const allUsersIncludingDeleted = await userModel.findMany(
-  {}, 
-  { includeDeleted: true }
+  {},
+  { includeDeleted: true },
 );
 ```
 
@@ -342,15 +342,13 @@ You can pass Google Sheets formulas to any field. This is useful for calculated 
 
 ```typescript
 await productModel.create({
-  name: 'iPhone',
+  name: "iPhone",
   price: 30000,
   qty: 2,
   // Formula to calculate total: price * qty
-  total: '=INDIRECT("R[0]C[-2]", FALSE) * INDIRECT("R[0]C[-1]", FALSE)' 
+  total: '=INDIRECT("R[0]C[-2]", FALSE) * INDIRECT("R[0]C[-1]", FALSE)',
 });
 ```
-
-
 
 ## License
 
