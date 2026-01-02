@@ -116,6 +116,34 @@ export class Model<T extends RowData = RowData> {
         return results;
     }
 
+    async count(filter?: Filter<T>, options?: { includeDeleted?: boolean }): Promise<number> {
+        await this.ensureHeaders();
+        const rows = await this.client.getSheetValues(`${this.sheetName}!A2:Z`);
+        if (!rows) return 0;
+
+        let matchingRows = 0;
+        const deletedAtField = this.getDeletedAtField();
+
+        for (const row of rows) {
+            const item = this.mapRowToObject(row);
+
+            // Filter out soft-deleted items unless explicitly requested
+            if (!options?.includeDeleted && deletedAtField && item[deletedAtField as keyof T]) {
+                continue;
+            }
+
+            if (filter) {
+                if (this.matchesFilter(item, filter)) {
+                    matchingRows++;
+                }
+            } else {
+                matchingRows++;
+            }
+        }
+
+        return matchingRows;
+    }
+
     private applyFilter(results: T[], filter: Filter<T>): T[] {
         return results.filter((item: T) => this.matchesFilter(item, filter));
     }
